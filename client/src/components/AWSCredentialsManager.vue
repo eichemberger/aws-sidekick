@@ -1,21 +1,21 @@
 <template>
-  <div class="bg-gray-800 shadow-sm rounded-lg border border-gray-700">
-    <div class="px-6 py-4 border-b border-gray-700">
+  <div class="card">
+    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
       <div class="flex items-center justify-between">
         <div>
-          <h3 class="text-lg font-medium text-white">AWS Credentials</h3>
-          <p class="text-sm text-gray-400">Configure AWS credentials for your session</p>
+          <h3 class="text-lg font-medium text-primary">AWS Credentials</h3>
+          <p class="text-sm text-secondary">Configure AWS credentials for your session</p>
         </div>
         <div class="flex items-center space-x-2">
-          <div v-if="awsStore.hasValidCredentials" class="flex items-center text-green-400">
+          <div v-if="awsStore.hasValidCredentials" class="flex items-center text-green-600 dark:text-green-400">
             <CheckCircleIcon class="h-5 w-5 mr-1" />
             <span class="text-sm font-medium">Connected</span>
           </div>
-          <div v-else-if="awsStore.credentialsInfo && !awsStore.hasValidCredentials" class="flex items-center text-red-400">
+          <div v-else-if="awsStore.credentialsInfo && !awsStore.hasValidCredentials" class="flex items-center text-red-600 dark:text-red-400">
             <XCircleIcon class="h-5 w-5 mr-1" />
             <span class="text-sm font-medium">Invalid</span>
           </div>
-          <div v-else class="flex items-center text-gray-500">
+          <div v-else class="flex items-center text-gray-500 dark:text-gray-500">
             <ExclamationTriangleIcon class="h-5 w-5 mr-1" />
             <span class="text-sm font-medium">Not configured</span>
           </div>
@@ -25,45 +25,45 @@
 
     <div class="p-6">
       <!-- Current Account Info -->
-      <div v-if="awsStore.accountInfo" class="mb-6 p-4 bg-green-900/20 border border-green-800 rounded-lg">
-        <h4 class="text-sm font-medium text-green-300 mb-2">Current AWS Account</h4>
+      <div v-if="awsStore.accountInfo" class="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+        <h4 class="text-sm font-medium text-green-800 dark:text-green-300 mb-2">Current AWS Account</h4>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
           <div>
-            <span class="text-green-400 font-medium">Account ID:</span>
-            <span class="text-green-200 ml-1">{{ awsStore.accountId }}</span>
+            <span class="text-green-700 dark:text-green-400 font-medium">Account ID:</span>
+            <span class="text-green-600 dark:text-green-200 ml-1">{{ awsStore.accountId }}</span>
           </div>
           <div>
-            <span class="text-green-400 font-medium">Region:</span>
-            <span class="text-green-200 ml-1">{{ awsStore.region }}</span>
+            <span class="text-green-700 dark:text-green-400 font-medium">Region:</span>
+            <span class="text-green-600 dark:text-green-200 ml-1">{{ awsStore.region }}</span>
           </div>
           <div>
-            <span class="text-green-400 font-medium">Type:</span>
-            <span class="text-green-200 ml-1 capitalize">{{ awsStore.credentialsType }}</span>
+            <span class="text-green-700 dark:text-green-400 font-medium">Type:</span>
+            <span class="text-green-600 dark:text-green-200 ml-1 capitalize">{{ awsStore.credentialsType }}</span>
           </div>
         </div>
       </div>
 
       <!-- Credential Type Selector -->
       <div class="mb-6">
-        <label class="text-sm font-medium text-gray-300 mb-3 block">Credential Type</label>
+        <label class="text-sm font-medium text-primary mb-3 block">Credential Type</label>
         <div class="flex space-x-4">
           <label class="flex items-center">
             <input
               v-model="credentialType"
               type="radio"
               value="keys"
-              class="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-600 bg-gray-700"
+              class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
             />
-            <span class="ml-2 text-sm text-gray-300">Access Keys</span>
+            <span class="ml-2 text-sm text-secondary">Access Keys</span>
           </label>
           <label class="flex items-center">
             <input
               v-model="credentialType"
               type="radio"
               value="profile"
-              class="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-600 bg-gray-700"
+              class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
             />
-            <span class="ml-2 text-sm text-gray-300">AWS Profile</span>
+            <span class="ml-2 text-sm text-secondary">AWS Profile</span>
           </label>
         </div>
       </div>
@@ -73,7 +73,7 @@
         <!-- Access Keys Form -->
         <div v-if="credentialType === 'keys'" class="space-y-4">
           <div>
-            <label for="accessKeyId" class="block text-sm font-medium text-gray-300 mb-1">
+            <label for="accessKeyId" class="block text-sm font-medium text-primary mb-1">
               Access Key ID *
             </label>
             <input
@@ -82,12 +82,12 @@
               type="text"
               required
               placeholder="AKIAIOSFODNN7EXAMPLE"
-              class="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-gray-700 text-white placeholder-gray-400"
+              class="input-field"
             />
           </div>
           
           <div>
-            <label for="secretAccessKey" class="block text-sm font-medium text-gray-300 mb-1">
+            <label for="secretAccessKey" class="block text-sm font-medium text-primary mb-1">
               Secret Access Key *
             </label>
             <input
@@ -96,12 +96,12 @@
               type="password"
               required
               placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-              class="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-gray-700 text-white placeholder-gray-400"
+              class="input-field"
             />
           </div>
           
           <div>
-            <label for="sessionToken" class="block text-sm font-medium text-gray-300 mb-1">
+            <label for="sessionToken" class="block text-sm font-medium text-primary mb-1">
               Session Token (Optional)
             </label>
             <input
@@ -109,7 +109,7 @@
               v-model="form.session_token"
               type="password"
               placeholder="Temporary session token for assumed roles"
-              class="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-gray-700 text-white placeholder-gray-400"
+              class="input-field"
             />
           </div>
         </div>
@@ -117,7 +117,7 @@
         <!-- Profile Form -->
         <div v-else-if="credentialType === 'profile'" class="space-y-4">
           <div>
-            <label for="profile" class="block text-sm font-medium text-gray-300 mb-1">
+            <label for="profile" class="block text-sm font-medium text-primary mb-1">
               AWS Profile Name *
             </label>
             <input
@@ -126,9 +126,9 @@
               type="text"
               required
               placeholder="default"
-              class="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-gray-700 text-white placeholder-gray-400"
+              class="input-field"
             />
-            <p class="text-xs text-gray-400 mt-1">
+            <p class="text-xs text-muted mt-1">
               Profile name from ~/.aws/credentials or ~/.aws/config
             </p>
           </div>
@@ -136,14 +136,14 @@
 
         <!-- Region -->
         <div>
-          <label for="region" class="block text-sm font-medium text-gray-300 mb-1">
+          <label for="region" class="block text-sm font-medium text-primary mb-1">
             AWS Region *
           </label>
           <select
             id="region"
             v-model="form.region"
             required
-            class="w-full px-3 py-2 border border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-gray-700 text-white"
+            class="input-field"
           >
             <option value="us-east-1">US East (N. Virginia)</option>
             <option value="us-east-2">US East (Ohio)</option>
@@ -162,21 +162,21 @@
         </div>
 
         <!-- Error Display -->
-        <div v-if="error" class="p-3 bg-red-900/20 border border-red-800 rounded-md">
+        <div v-if="error" class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
           <div class="flex">
-            <XCircleIcon class="h-5 w-5 text-red-300 flex-shrink-0" />
+            <XCircleIcon class="h-5 w-5 text-red-600 dark:text-red-300 flex-shrink-0" />
             <div class="ml-2">
-              <p class="text-sm text-red-300">{{ error }}</p>
+              <p class="text-sm text-red-800 dark:text-red-300">{{ error }}</p>
             </div>
           </div>
         </div>
 
         <!-- Success Display -->
-        <div v-if="validationResult?.valid" class="p-3 bg-green-900/20 border border-green-800 rounded-md">
+        <div v-if="validationResult?.valid" class="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
           <div class="flex">
-            <CheckCircleIcon class="h-5 w-5 text-green-300 flex-shrink-0" />
+            <CheckCircleIcon class="h-5 w-5 text-green-600 dark:text-green-300 flex-shrink-0" />
             <div class="ml-2">
-              <p class="text-sm text-green-300">
+              <p class="text-sm text-green-800 dark:text-green-300">
                 Credentials validated successfully!
                 <span v-if="validationResult.account_id">
                   (Account: {{ validationResult.account_id }})
@@ -192,35 +192,40 @@
             type="button"
             @click="validateOnly"
             :disabled="isLoading || !isFormValid"
-            class="flex-1 px-4 py-2 border border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-300 bg-gray-700 hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="btn-secondary flex-1"
           >
             <span v-if="isValidating" class="flex items-center justify-center">
               <ArrowPathIcon class="h-4 w-4 animate-spin mr-2" />
               Validating...
             </span>
-            <span v-else>Validate</span>
+            <span v-else>Validate Only</span>
           </button>
-          
           <button
             type="submit"
             :disabled="isLoading || !isFormValid"
-            class="flex-1 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="btn-primary flex-1"
           >
-            <span v-if="isLoading" class="flex items-center justify-center">
+            <span v-if="isLoading && !isValidating" class="flex items-center justify-center">
               <ArrowPathIcon class="h-4 w-4 animate-spin mr-2" />
               Setting...
             </span>
             <span v-else>Set Credentials</span>
           </button>
-          
+        </div>
+
+        <!-- Clear Credentials Button -->
+        <div v-if="awsStore.hasValidCredentials" class="pt-4 border-t border-gray-200 dark:border-gray-700">
           <button
-            v-if="awsStore.credentialsInfo"
             type="button"
             @click="clearCredentials"
             :disabled="isLoading"
-            class="px-4 py-2 border border-red-600 rounded-md shadow-sm text-sm font-medium text-red-400 bg-gray-700 hover:bg-red-900/20 focus:ring-2 focus:ring-red-500 focus:border-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="w-full btn-secondary text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 border-red-300 dark:border-red-600 hover:border-red-400 dark:hover:border-red-500"
           >
-            Clear
+            <span v-if="isLoading && !isValidating" class="flex items-center justify-center">
+              <ArrowPathIcon class="h-4 w-4 animate-spin mr-2" />
+              Clearing...
+            </span>
+            <span v-else>Clear Credentials</span>
           </button>
         </div>
       </form>

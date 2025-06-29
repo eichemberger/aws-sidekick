@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-screen bg-gray-900">
+  <div class="flex flex-col h-screen bg-white dark:bg-gray-900">
     <!-- Messages Area -->
     <MessageList 
       :messages="messages"

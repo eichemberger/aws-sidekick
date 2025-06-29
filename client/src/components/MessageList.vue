@@ -9,8 +9,8 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
             </svg>
           </div>
-          <h1 class="text-3xl font-bold text-white mb-3">AWS Sidekick</h1>
-          <p class="text-gray-400 mb-10 text-lg max-w-md mx-auto">How can I help you with your AWS infrastructure today?</p>
+          <h1 class="text-3xl font-bold text-primary mb-3">AWS Sidekick</h1>
+          <p class="text-secondary mb-10 text-lg max-w-md mx-auto">How can I help you with your AWS infrastructure today?</p>
           
           <!-- Example Prompts -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto">
@@ -18,9 +18,9 @@
               v-for="example in examplePrompts"
               :key="example"
               @click="$emit('use-example', example)"
-              class="group p-5 text-left rounded-xl border border-gray-700 hover:border-blue-500/50 bg-gray-800/50 hover:bg-gray-800 transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/10"
+              class="group p-5 text-left rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-500/50 bg-gray-50/50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/10"
             >
-              <div class="text-sm text-gray-300 group-hover:text-white transition-colors">{{ example }}</div>
+              <div class="text-sm text-secondary group-hover:text-primary transition-colors">{{ example }}</div>
             </button>
           </div>
         </div>
@@ -37,7 +37,7 @@
           <div class="px-6 py-8 rounded-2xl mx-4" 
                :class="message.role === 'user' 
                  ? 'bg-gradient-to-r from-blue-600/10 to-purple-600/10 border border-blue-500/20' 
-                 : 'bg-gray-800/50 border border-gray-700/50'">
+                 : 'bg-gray-50/50 dark:bg-gray-800/50 border border-gray-200/50 dark:border-gray-700/50'">
             <div class="flex gap-4">
               <!-- Avatar -->
               <div class="flex-shrink-0">
@@ -60,7 +60,7 @@
               <div class="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                 <button
                   @click="$emit('copy-message', message.content)"
-                  class="p-2 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-white transition-colors"
+                  class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 text-secondary hover:text-primary transition-colors"
                   title="Copy message"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -172,198 +172,137 @@ const enhanceAWSContent = (html: string) => {
 <style scoped>
 /* Modern Markdown Styling */
 .markdown-content {
-  @apply text-gray-100 leading-relaxed;
+  @apply text-gray-800 dark:text-gray-100 leading-relaxed;
   font-size: 15px;
   line-height: 1.7;
 }
 
 /* Typography */
 .markdown-content :deep(h1) {
-  @apply text-2xl font-bold text-white mb-4 mt-6 pb-2 border-b-2 border-blue-500/30;
+  @apply text-2xl font-bold text-gray-900 dark:text-white mb-4 mt-6 pb-2 border-b-2 border-blue-500/30;
 }
 
 .markdown-content :deep(h2) {
-  @apply text-xl font-semibold text-blue-300 mb-3 mt-5;
+  @apply text-xl font-semibold text-blue-700 dark:text-blue-300 mb-3 mt-5;
 }
 
 .markdown-content :deep(h3) {
-  @apply text-lg font-semibold text-green-300 mb-2 mt-4;
+  @apply text-lg font-semibold text-green-700 dark:text-green-300 mb-2 mt-4;
 }
 
 .markdown-content :deep(h4) {
-  @apply text-base font-semibold text-yellow-300 mb-2 mt-3;
+  @apply text-base font-semibold text-yellow-700 dark:text-yellow-300 mb-2 mt-3;
 }
 
 .markdown-content :deep(p) {
-  @apply mb-4 text-gray-200;
+  @apply mb-4 text-gray-700 dark:text-gray-200;
 }
 
 .markdown-content :deep(strong) {
-  @apply font-semibold text-white;
+  @apply font-semibold text-gray-900 dark:text-white;
 }
 
 .markdown-content :deep(em) {
-  @apply italic text-gray-300;
+  @apply italic text-gray-700 dark:text-gray-300;
 }
 
 /* Lists */
 .markdown-content :deep(ul) {
-  @apply mb-4 space-y-1;
+  @apply list-disc list-inside mb-4 space-y-1 text-gray-700 dark:text-gray-200;
 }
 
 .markdown-content :deep(ol) {
-  @apply mb-4 space-y-1;
+  @apply list-decimal list-inside mb-4 space-y-1 text-gray-700 dark:text-gray-200;
 }
 
 .markdown-content :deep(li) {
-  @apply text-gray-200 leading-relaxed;
-  padding-left: 0.5rem;
-  margin-left: 1.5rem;
-  position: relative;
+  @apply ml-4;
 }
 
-.markdown-content :deep(ul li::before) {
-  content: "•";
-  @apply absolute -left-6 text-blue-400 font-bold;
+/* Code */
+.markdown-content :deep(code) {
+  @apply bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-2 py-1 rounded text-sm font-mono;
 }
 
-.markdown-content :deep(ol li::before) {
-  counter-increment: list-item;
-  content: counter(list-item) ".";
-  @apply absolute -left-8 text-blue-400 font-semibold text-sm;
-}
-
-/* Code Blocks & Inline Code */
-.markdown-content :deep(code:not(.hljs)) {
-  @apply px-2 py-1 bg-gray-700/60 text-purple-300 rounded-md text-sm font-mono border border-gray-600/50;
+.markdown-content :deep(pre) {
+  @apply bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-4 overflow-x-auto border border-gray-200 dark:border-gray-700;
 }
 
 .markdown-content :deep(.hljs-pre) {
-  @apply my-4 rounded-xl overflow-hidden shadow-lg border border-gray-600/30;
+  @apply bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-4 overflow-x-auto border border-gray-200 dark:border-gray-700;
 }
 
 .markdown-content :deep(.hljs) {
-  @apply p-4 bg-gray-800/80 text-sm leading-relaxed;
-  font-family: 'JetBrains Mono', 'Monaco', 'Consolas', monospace;
+  @apply text-gray-800 dark:text-gray-200 bg-transparent;
 }
 
 /* Tables */
 .markdown-content :deep(.table-wrapper) {
-  @apply my-6 overflow-x-auto rounded-xl shadow-lg border border-gray-600/30;
+  @apply overflow-x-auto mb-4 rounded-lg border border-gray-200 dark:border-gray-700;
 }
 
 .markdown-content :deep(.aws-table) {
-  @apply w-full border-collapse bg-gray-800/50;
-}
-
-.markdown-content :deep(.aws-table thead) {
-  @apply bg-gray-700/50;
+  @apply w-full border-collapse bg-white dark:bg-gray-800;
 }
 
 .markdown-content :deep(.aws-table th) {
-  @apply px-4 py-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider border-b border-gray-600/50;
+  @apply bg-gray-50 dark:bg-gray-700 px-4 py-3 text-left font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-600;
 }
 
 .markdown-content :deep(.aws-table td) {
-  @apply px-4 py-3 text-sm text-gray-200 border-b border-gray-700/30;
+  @apply px-4 py-3 text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-gray-700;
 }
 
-.markdown-content :deep(.aws-table tbody tr:hover) {
-  @apply bg-gray-700/30;
-}
-
-/* Blockquotes */
-.markdown-content :deep(blockquote) {
-  @apply my-4 pl-4 py-2 border-l-4 border-blue-500/50 bg-blue-500/5 rounded-r-lg italic text-gray-300;
-}
-
-/* Links */
-.markdown-content :deep(a) {
-  @apply text-blue-400 hover:text-blue-300 underline underline-offset-2 transition-colors;
-}
-
-/* Horizontal Rules */
-.markdown-content :deep(hr) {
-  @apply my-6 border-0 h-px bg-gradient-to-r from-transparent via-gray-600 to-transparent;
-}
-
-/* AWS-specific Styling */
+/* AWS Resource Styling */
 .markdown-content :deep(.aws-resource) {
-  @apply px-2 py-0.5 rounded-md text-xs font-mono font-semibold border;
+  @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800;
 }
 
 .markdown-content :deep(.aws-resource.ec2) {
-  @apply bg-blue-500/15 text-blue-300 border-blue-500/30;
+  @apply bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-800;
 }
 
 .markdown-content :deep(.aws-resource.security-group) {
-  @apply bg-green-500/15 text-green-300 border-green-500/30;
-}
-
-.markdown-content :deep(.aws-resource.volume) {
-  @apply bg-purple-500/15 text-purple-300 border-purple-500/30;
-}
-
-.markdown-content :deep(.aws-resource.subnet) {
-  @apply bg-yellow-500/15 text-yellow-300 border-yellow-500/30;
+  @apply bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 border-red-200 dark:border-red-800;
 }
 
 .markdown-content :deep(.aws-resource.vpc) {
-  @apply bg-indigo-500/15 text-indigo-300 border-indigo-500/30;
-}
-
-.markdown-content :deep(.aws-resource.ami) {
-  @apply bg-orange-500/15 text-orange-300 border-orange-500/30;
-}
-
-.markdown-content :deep(.aws-resource.eni) {
-  @apply bg-cyan-500/15 text-cyan-300 border-cyan-500/30;
-}
-
-.markdown-content :deep(.aws-resource.route-table) {
-  @apply bg-pink-500/15 text-pink-300 border-pink-500/30;
+  @apply bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800;
 }
 
 /* Status Badges */
 .markdown-content :deep(.status-badge) {
-  @apply inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold;
+  @apply inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium;
 }
 
 .markdown-content :deep(.status-badge.success) {
-  @apply bg-green-500/15 text-green-300 border border-green-500/30;
+  @apply bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300;
 }
 
 .markdown-content :deep(.status-badge.warning) {
-  @apply bg-yellow-500/15 text-yellow-300 border border-yellow-500/30;
+  @apply bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300;
 }
 
 .markdown-content :deep(.status-badge.error) {
-  @apply bg-red-500/15 text-red-300 border border-red-500/30;
+  @apply bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300;
 }
 
 .markdown-content :deep(.status-badge.info) {
-  @apply bg-blue-500/15 text-blue-300 border border-blue-500/30;
+  @apply bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300;
 }
 
-/* AWS Regions */
+/* AWS Region Badge */
 .markdown-content :deep(.aws-region) {
-  @apply inline-flex items-center gap-1 px-2 py-0.5 bg-gray-600/20 text-gray-300 rounded-md text-sm font-mono border border-gray-600/30;
+  @apply inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300;
 }
 
-/* Syntax Highlighting Overrides */
-.markdown-content :deep(.hljs-keyword) {
-  @apply text-purple-400;
+/* Blockquotes */
+.markdown-content :deep(blockquote) {
+  @apply border-l-4 border-blue-500 pl-4 py-2 mb-4 bg-blue-50 dark:bg-blue-900/20 text-gray-700 dark:text-gray-300 italic;
 }
 
-.markdown-content :deep(.hljs-string) {
-  @apply text-green-400;
-}
-
-.markdown-content :deep(.hljs-number) {
-  @apply text-orange-400;
-}
-
-.markdown-content :deep(.hljs-comment) {
-  @apply text-gray-500 italic;
+/* Links */
+.markdown-content :deep(a) {
+  @apply text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline transition-colors;
 }
 </style> 

@@ -1,12 +1,12 @@
 <template>
-  <div class="flex h-screen bg-gray-900 text-white">
+  <div class="flex h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white transition-colors duration-200">
     <!-- Sidebar -->
-    <div class="w-64 bg-gray-900 border-r border-gray-700 flex flex-col">
+    <div class="w-64 sidebar flex flex-col">
       <!-- Header -->
-      <div class="p-4 border-b border-gray-700">
+      <div class="p-4 border-b border-gray-200 dark:border-gray-700">
         <button
           @click="createNewChat"
-          class="w-full flex items-center gap-3 px-3 py-2 rounded-lg border border-gray-600 hover:bg-gray-800 transition-colors"
+          class="w-full flex items-center gap-3 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -16,22 +16,25 @@
       </div>
 
       <!-- Chat History -->
-      <div class="flex-1 overflow-y-auto">
+      <div class="flex-1 overflow-y-auto custom-scrollbar">
         <div class="p-2 space-y-1">
           <div
             v-for="conversation in chatStore.conversations"
             :key="conversation.id"
             @click="selectChat(conversation.id)"
-            class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-800 cursor-pointer transition-colors group"
-            :class="{ 'bg-gray-800': isCurrentChat(conversation.id) }"
+            class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors group"
+            :class="{ 
+              'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white': isCurrentChat(conversation.id),
+              'text-gray-700 dark:text-gray-300': !isCurrentChat(conversation.id)
+            }"
           >
-            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.959 8.959 0 01-4.906-1.471L3 21l2.471-5.094A8.959 8.959 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z"></path>
             </svg>
             <span class="flex-1 text-sm truncate">{{ conversation.title }}</span>
             <button
               @click.stop="deleteChat(conversation.id)"
-              class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white transition-all"
+              class="opacity-0 group-hover:opacity-100 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-all"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
@@ -42,19 +45,22 @@
       </div>
 
       <!-- Bottom Menu -->
-      <div class="p-4 border-t border-gray-700 space-y-2">
+      <div class="p-4 border-t border-gray-200 dark:border-gray-700 space-y-2">
         <router-link
           to="/tasks"
-          class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors text-sm"
+          class="nav-item"
+          :class="{ 'active': $route.path === '/tasks' }"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
           </svg>
           Tasks
         </router-link>
+        
         <router-link
           to="/aws"
-          class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors text-sm"
+          class="nav-item"
+          :class="{ 'active': $route.path === '/aws' }"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
@@ -62,11 +68,16 @@
           </svg>
           AWS Settings
         </router-link>
+
+        <!-- Theme Toggle -->
+        <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
+          <ThemeToggle />
+        </div>
       </div>
     </div>
 
     <!-- Main Content -->
-    <div class="flex-1 flex flex-col">
+    <div class="flex-1 flex flex-col bg-white dark:bg-gray-900">
       <router-view />
     </div>
     
@@ -76,9 +87,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, defineAsyncComponent, computed } from 'vue'
+import { onMounted, defineAsyncComponent } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
+import { useThemeStore } from '@/stores/theme'
+import ThemeToggle from '@/components/ThemeToggle.vue'
 
 // Lazy load performance monitor
 const PerformanceMonitor = defineAsyncComponent(() => import('@/components/PerformanceMonitor.vue'))
@@ -86,10 +99,12 @@ const PerformanceMonitor = defineAsyncComponent(() => import('@/components/Perfo
 const router = useRouter()
 const route = useRoute()
 const chatStore = useChatStore()
+const themeStore = useThemeStore()
 
-// Initialize chat store on app mount
+// Initialize stores on app mount
 onMounted(async () => {
   await chatStore.initializeChat()
+  themeStore.initializeTheme()
 })
 
 const createNewChat = async () => {

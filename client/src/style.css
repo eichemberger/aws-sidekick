@@ -8,21 +8,34 @@
   }
   
   body {
-    @apply bg-white text-gray-900;
+    @apply bg-white dark:bg-gray-900 text-gray-900 dark:text-white transition-colors duration-200;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-gray-900 hover:bg-gray-800 text-white px-3 py-1.5 rounded text-sm transition-colors duration-150 focus:outline-none focus:ring-1 focus:ring-gray-900;
+    @apply bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-gray-200 
+           text-white dark:text-gray-900 px-3 py-1.5 rounded text-sm 
+           transition-colors duration-150 focus:outline-none 
+           focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-100;
   }
   
   .btn-secondary {
-    @apply border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded text-sm transition-colors duration-150 focus:outline-none focus:ring-1 focus:ring-gray-300;
+    @apply border border-gray-300 dark:border-gray-600 
+           hover:bg-gray-50 dark:hover:bg-gray-800 
+           text-gray-700 dark:text-gray-300 px-3 py-1.5 rounded text-sm 
+           transition-colors duration-150 focus:outline-none 
+           focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-600
+           bg-white dark:bg-gray-900;
   }
   
   .input-field {
-    @apply w-full px-3 py-2 border border-gray-200 rounded text-sm focus:outline-none focus:border-gray-400 transition-colors duration-150;
+    @apply w-full px-3 py-2 border border-gray-200 dark:border-gray-700 
+           rounded text-sm focus:outline-none 
+           focus:border-gray-400 dark:focus:border-gray-500 
+           transition-colors duration-150
+           bg-white dark:bg-gray-800 text-gray-900 dark:text-white
+           placeholder-gray-500 dark:placeholder-gray-400;
   }
   
   .chat-message {
@@ -36,9 +49,45 @@
   .chat-message.assistant {
     @apply text-left;
   }
+
+  /* Theme-aware card component */
+  .card {
+    @apply bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 
+           rounded-lg shadow-sm transition-colors duration-200;
+  }
+
+  /* Theme-aware sidebar */
+  .sidebar {
+    @apply bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700;
+  }
+
+  /* Theme-aware nav item */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg 
+           hover:bg-gray-100 dark:hover:bg-gray-800 
+           transition-colors text-sm
+           text-gray-700 dark:text-gray-300;
+  }
+
+  .nav-item.active {
+    @apply bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white;
+  }
+
+  /* Theme-aware text colors */
+  .text-primary {
+    @apply text-gray-900 dark:text-white;
+  }
+
+  .text-secondary {
+    @apply text-gray-600 dark:text-gray-400;
+  }
+
+  .text-muted {
+    @apply text-gray-500 dark:text-gray-500;
+  }
 }
 
-/* Minimal scrollbar */
+/* Minimal scrollbar with theme support */
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
 }
@@ -48,9 +97,16 @@
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  @apply bg-gray-200 rounded-full;
+  @apply bg-gray-200 dark:bg-gray-700 rounded-full;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-300;
+  @apply bg-gray-300 dark:bg-gray-600;
+}
+
+/* Dark mode specific adjustments */
+@media (prefers-color-scheme: dark) {
+  html {
+    color-scheme: dark;
+  }
 } 
