@@ -65,6 +65,10 @@ def main():
     
     try:
         config = initialize_config()
+        
+        # Validate configuration including AWS credentials
+        config.validate()
+        
         config.print_status()
         
         agent, docs_tools, diagram_tools, github_tools = initialize_agent()
