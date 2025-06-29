@@ -49,6 +49,30 @@ export interface AWSAccountInfo {
   user_arn: string
 }
 
+export interface AWSCredentialsRequest {
+  access_key_id?: string
+  secret_access_key?: string
+  session_token?: string
+  region: string
+  profile?: string
+}
+
+export interface AWSCredentialsResponse {
+  region: string
+  profile?: string
+  has_access_key: boolean
+  has_session_token: boolean
+  is_valid: boolean
+}
+
+export interface AWSCredentialsValidation {
+  valid: boolean
+  error?: string
+  account_id?: string
+  region?: string
+  user_arn?: string
+}
+
 export interface HealthCheck {
   message: string
   status: string

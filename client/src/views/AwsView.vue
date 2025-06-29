@@ -17,6 +17,11 @@
           </button>
         </div>
 
+        <!-- AWS Credentials Manager -->
+        <div class="mb-6">
+          <AWSCredentialsManager />
+        </div>
+
         <!-- Connection Status -->
         <div class="bg-gray-800 rounded-lg p-6 mb-6">
           <div class="flex items-center justify-between">
@@ -191,6 +196,7 @@ import { ref, onMounted } from 'vue'
 import { useAwsStore } from '@/stores/aws'
 import { useTasksStore } from '@/stores/tasks'
 import { apiService } from '@/services/api'
+import AWSCredentialsManager from '@/components/AWSCredentialsManager.vue'
 
 const awsStore = useAwsStore()
 const tasksStore = useTasksStore()

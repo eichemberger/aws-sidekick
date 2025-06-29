@@ -74,6 +74,22 @@ class AWSAccountInfo(BaseModel):
     user_arn: str
 
 
+class AWSCredentialsRequest(BaseModel):
+    access_key_id: Optional[str] = Field(None, description="AWS Access Key ID")
+    secret_access_key: Optional[str] = Field(None, description="AWS Secret Access Key")
+    session_token: Optional[str] = Field(None, description="AWS Session Token")
+    region: str = Field("us-east-1", description="AWS Region")
+    profile: Optional[str] = Field(None, description="AWS Profile name")
+
+
+class AWSCredentialsResponse(BaseModel):
+    region: str
+    profile: Optional[str] = None
+    has_access_key: bool
+    has_session_token: bool
+    is_valid: bool
+
+
 class TaskCreatedResponse(BaseModel):
     task_id: str
     status: str = "pending"
@@ -366,7 +382,128 @@ class FastAPIAdapter:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Error starting cost optimization: {str(e)}")
 
-        # SPA routing: serve Vue.js app for non-API routes
+        # AWS Credentials Management Endpoints
+        @self._app.post("/api/aws/credentials", response_model=AWSCredentialsResponse, summary="Set AWS credentials")
+        async def set_aws_credentials(request: AWSCredentialsRequest):
+            """Set AWS credentials for the current session"""
+            try:
+                # Create credentials object
+                credentials = AWSCredentials(
+                    access_key_id=request.access_key_id,
+                    secret_access_key=request.secret_access_key,
+                    session_token=request.session_token,
+                    region=request.region,
+                    profile=request.profile
+                )
+                
+                # Validate credentials
+                if not credentials.is_valid():
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="Invalid credentials: Either provide access_key_id and secret_access_key, or a profile name"
+                    )
+                
+                # Test credentials by attempting to validate them
+                is_valid = await self._aws_service.validate_credentials(credentials)
+                if not is_valid:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Invalid AWS credentials: Unable to authenticate with AWS"
+                    )
+                
+                # Set credentials in service
+                await self._aws_service.set_credentials(credentials)
+                
+                return AWSCredentialsResponse(
+                    region=credentials.region,
+                    profile=credentials.profile,
+                    has_access_key=credentials.uses_keys(),
+                    has_session_token=credentials.session_token is not None,
+                    is_valid=True
+                )
+                
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error setting AWS credentials: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to set credentials: {str(e)}")
+
+        @self._app.get("/api/aws/credentials", response_model=AWSCredentialsResponse, summary="Get current AWS credentials info")
+        async def get_aws_credentials():
+            """Get information about current AWS credentials (without exposing sensitive data)"""
+            try:
+                credentials = self._aws_service.get_current_credentials()
+                if not credentials:
+                    raise HTTPException(status_code=404, detail="No credentials configured")
+                
+                # Test if credentials are still valid
+                is_valid = await self._aws_service.validate_credentials(credentials)
+                
+                return AWSCredentialsResponse(
+                    region=credentials.region,
+                    profile=credentials.profile,
+                    has_access_key=credentials.uses_keys(),
+                    has_session_token=credentials.session_token is not None,
+                    is_valid=is_valid
+                )
+                
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error getting AWS credentials info: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self._app.post("/api/aws/credentials/validate", summary="Validate AWS credentials")
+        async def validate_aws_credentials(request: AWSCredentialsRequest):
+            """Validate AWS credentials without setting them"""
+            try:
+                credentials = AWSCredentials(
+                    access_key_id=request.access_key_id,
+                    secret_access_key=request.secret_access_key,
+                    session_token=request.session_token,
+                    region=request.region,
+                    profile=request.profile
+                )
+                
+                if not credentials.is_valid():
+                    return {"valid": False, "error": "Invalid credential format"}
+                
+                is_valid = await self._aws_service.validate_credentials(credentials)
+                
+                if is_valid:
+                    # Get account info to provide feedback
+                    try:
+                        account_info = await self._aws_service.get_account_info(credentials)
+                        return {
+                            "valid": True,
+                            "account_id": account_info.account_id,
+                            "region": credentials.region,
+                            "user_arn": account_info.user_arn
+                        }
+                    except Exception:
+                        return {"valid": True}
+                else:
+                    return {"valid": False, "error": "Unable to authenticate with AWS"}
+                    
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error validating AWS credentials: {e}")
+                return {"valid": False, "error": str(e)}
+
+        @self._app.delete("/api/aws/credentials", status_code=204, summary="Clear AWS credentials")
+        async def clear_aws_credentials():
+            """Clear current AWS credentials"""
+            try:
+                await self._aws_service.clear_credentials()
+                return Response(status_code=204)
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error clearing AWS credentials: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        # Chat/Conversation Management Endpoints
         @self._app.get("/api/conversations", response_model=List[ConversationResponse], summary="List conversations")
         async def list_conversations(limit: int = 50, offset: int = 0):
             """Get list of conversations with pagination"""

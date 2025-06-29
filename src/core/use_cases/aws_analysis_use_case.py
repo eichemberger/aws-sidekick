@@ -17,6 +17,10 @@ class AWSAnalysisUseCase:
         self._aws_client = aws_client
         self._agent_repository = agent_repository
 
+    async def validate_credentials(self, credentials: AWSCredentials) -> bool:
+        """Validate AWS credentials"""
+        return await self._aws_client.validate_credentials(credentials)
+
     async def get_account_info(self, credentials: AWSCredentials) -> AWSAccountInfo:
         """Get AWS account information"""
         if not await self._aws_client.validate_credentials(credentials):

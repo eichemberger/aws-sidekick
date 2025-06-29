@@ -8,6 +8,7 @@ It handles the creation and configuration of all dependencies.
 import os
 from typing import Optional
 from .config import get_config
+from .mcp_manager import get_mcp_manager
 
 # Domain and Ports
 from core.domain.value_objects.aws_credentials import AWSCredentials
@@ -34,6 +35,7 @@ from adapters.outbound.agent_repository_adapter import AgentRepositoryAdapter
 from adapters.outbound.task_repository_adapter import InMemoryTaskRepositoryAdapter
 from adapters.outbound.sqlite_task_repository_adapter import SQLiteTaskRepositoryAdapter
 from adapters.outbound.sqlite_chat_repository_adapter import SQLiteChatRepositoryAdapter
+from adapters.outbound.mcp_reinitialization_adapter import MCPReinitializationAdapter
 
 
 class DependencyContainer:
@@ -41,17 +43,36 @@ class DependencyContainer:
 
     def __init__(self):
         self._instances = {}
-        self._agent = None
-        self._docs_tools = None
-        self._diagram_tools = None
-        self._github_tools = None
+        self._mcp_manager = get_mcp_manager()
+        self._mcp_reinitialization_adapter = None
 
     def configure_agent(self, agent, docs_tools, diagram_tools, github_tools=None):
         """Configure the agent and tools"""
-        self._agent = agent
-        self._docs_tools = docs_tools
-        self._diagram_tools = diagram_tools
-        self._github_tools = github_tools
+        # Store in MCP manager for lifecycle management
+        self._mcp_manager._agent = agent
+        self._mcp_manager._docs_tools = docs_tools
+        self._mcp_manager._diagram_tools = diagram_tools
+        self._mcp_manager._github_tools = github_tools
+
+    def reinitialize_agent_with_new_credentials(self):
+        """Reinitialize agent and MCP servers with updated credentials"""
+        # Clear agent repository to force recreation with new agent
+        if 'agent_repository' in self._instances:
+            del self._instances['agent_repository']
+        
+        # Reinitialize MCP servers and agent
+        agent, docs_tools, diagram_tools, github_tools = self._mcp_manager.reinitialize_with_credentials()
+        
+        # Update configuration
+        self.configure_agent(agent, docs_tools, diagram_tools, github_tools)
+
+    def get_mcp_reinitialization_adapter(self) -> MCPReinitializationAdapter:
+        """Get MCP reinitialization adapter"""
+        if self._mcp_reinitialization_adapter is None:
+            self._mcp_reinitialization_adapter = MCPReinitializationAdapter()
+            # Set the container reference to avoid circular dependency
+            self._mcp_reinitialization_adapter.set_container(self)
+        return self._mcp_reinitialization_adapter
 
     def get_aws_client_adapter(self) -> AWSClientPort:
         """Get AWS client adapter"""
@@ -62,11 +83,12 @@ class DependencyContainer:
     def get_agent_repository_adapter(self) -> AgentRepositoryPort:
         """Get agent repository adapter"""
         if 'agent_repository' not in self._instances:
+            agent, docs_tools, diagram_tools, github_tools = self._mcp_manager.get_current_agent_and_tools()
             self._instances['agent_repository'] = AgentRepositoryAdapter(
-                self._agent,
-                self._docs_tools,
-                self._diagram_tools,
-                self._github_tools
+                agent,
+                docs_tools,
+                diagram_tools,
+                github_tools
             )
         return self._instances['agent_repository']
 
@@ -126,6 +148,7 @@ class DependencyContainer:
         if 'aws_service' not in self._instances:
             self._instances['aws_service'] = AWSApplicationService(
                 aws_analysis_use_case=self.get_aws_analysis_use_case(),
+                mcp_reinitialization_port=self.get_mcp_reinitialization_adapter(),
                 default_credentials=default_credentials
             )
         return self._instances['aws_service']
