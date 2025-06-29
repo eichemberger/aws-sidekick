@@ -68,6 +68,25 @@ class AWSConfig:
     access_key_id: Optional[str] = None
     secret_access_key: Optional[str] = None
     session_token: Optional[str] = None
+    
+    def validate(self) -> None:
+        """Validate AWS configuration"""
+        has_keys = bool(self.access_key_id and self.secret_access_key)
+        has_profile = bool(self.profile)
+        
+        if not has_keys and not has_profile:
+            raise ValueError(
+                "AWS credentials are required. Please configure either:\n"
+                "1. AWS access keys: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY\n"
+                "2. AWS profile: AWS_PROFILE\n"
+                "Set these in your .env file or environment variables."
+            )
+        
+        if has_keys and has_profile:
+            raise ValueError(
+                "Cannot use both AWS access keys and profile simultaneously. "
+                "Please configure either access keys OR profile, not both."
+            )
 
 
 @dataclass(frozen=True)
@@ -245,21 +264,13 @@ class Config:
         )
     
     def validate(self) -> None:
-        """Validate the entire configuration"""
-        errors = []
-        
+        """Validate all configuration settings"""
         try:
             self.model.validate()
-        except ValueError as e:
-            errors.append(f"Model configuration error: {e}")
-        
-        try:
+            self.aws.validate()
             self.database.validate()
         except ValueError as e:
-            errors.append(f"Database configuration error: {e}")
-        
-        if errors:
-            raise ValueError("Configuration validation failed:\n" + "\n".join(f"- {error}" for error in errors))
+            raise ValueError(f"Configuration validation failed: {str(e)}")
     
     def print_status(self) -> None:
         """Print configuration status for debugging"""

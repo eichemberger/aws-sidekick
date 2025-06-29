@@ -29,6 +29,18 @@ class MCPServerManager:
         """Initialize MCP servers and create agent with current environment"""
         logger.debug("initializing MCP servers and agent")
         
+        # Log AWS credential availability for debugging
+        has_access_key = bool(os.getenv("AWS_ACCESS_KEY_ID"))
+        has_profile = bool(os.getenv("AWS_PROFILE"))
+        aws_region = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+        
+        if has_access_key:
+            logger.info(f"aws_credentials_detected | type=<access_keys> | region=<{aws_region}>")
+        elif has_profile:
+            logger.info(f"aws_credentials_detected | type=<profile> | profile=<{os.getenv('AWS_PROFILE')}> | region=<{aws_region}>")
+        else:
+            logger.warning("no_aws_credentials_detected | MCP tools may fail to execute")
+        
         try:
             from strands import Agent
             from strands.tools.mcp import MCPClient
