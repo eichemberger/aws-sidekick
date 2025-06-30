@@ -2,9 +2,10 @@ import asyncio
 import uuid
 from typing import List, Optional
 from core.ports.inbound.task_service_port import TaskServicePort
-from core.domain.entities.task import Task, TaskType, TaskStatus
+from core.domain.entities.task import Task, TaskStatus
 from core.use_cases.execute_task_use_case import ExecuteTaskUseCase
 from core.ports.outbound.task_repository_port import TaskRepositoryPort
+from infrastructure.logging import get_logger
 
 
 class TaskApplicationService(TaskServicePort):
@@ -17,18 +18,18 @@ class TaskApplicationService(TaskServicePort):
     ):
         self._execute_task_use_case = execute_task_use_case
         self._task_repository = task_repository
+        self._logger = get_logger(__name__)
 
-    async def execute_task(self, description: str, task_type: TaskType) -> Task:
+    async def execute_task(self, description: str) -> Task:
         """Execute a cloud engineering task (waits for completion)"""
-        return await self._execute_task_use_case.execute(description, task_type)
+        return await self._execute_task_use_case.execute(description)
 
-    async def execute_task_async(self, description: str, task_type: TaskType) -> str:
+    async def execute_task_async(self, description: str) -> str:
         """Execute a cloud engineering task asynchronously (returns task ID immediately)"""
         # Create task with pending status
         task = Task(
             id=str(uuid.uuid4()),
             description=description,
-            task_type=task_type,
             status=TaskStatus.PENDING
         )
         
@@ -36,43 +37,63 @@ class TaskApplicationService(TaskServicePort):
         await self._task_repository.save_task(task)
         
         # Start background execution (fire and forget)
-        asyncio.create_task(self._execute_task_background(task.id, description, task_type))
+        asyncio.create_task(self._execute_task_background(task.id, description))
         
         # Return task ID immediately
         return task.id
 
-    async def _execute_task_background(self, task_id: str, description: str, task_type: TaskType):
+    async def _execute_task_background(self, task_id: str, description: str):
         """Execute task in background and update status"""
+        self._logger.info(f"task_background_started | task_id=<{task_id}> | description=<{description[:100]}...>")
+        
+        
         try:
             # Get the task to update
             task = await self._task_repository.get_task_by_id(task_id)
             if not task:
+                self._logger.error(f"task_not_found | task_id=<{task_id}>")
                 return
             
             # Mark as in progress
             task.mark_in_progress()
             await self._task_repository.update_task(task)
+            self._logger.info(f"task_marked_in_progress | task_id=<{task_id}>")
             
-            # Execute the actual task logic
-            result_task = await self._execute_task_use_case.execute(description, task_type)
+            # Get the agent repository from the use case (to access MCP tools)
+            agent_repository = self._execute_task_use_case._agent_repository
             
-            # Update with final result
-            if result_task.is_completed():
-                task.mark_completed(result_task.result)
-            elif result_task.is_failed():
-                task.mark_failed(result_task.error_message)
+            # Check if agent is available
+            if not agent_repository.is_available():
+                self._logger.error(f"agent_not_available | task_id=<{task_id}>")
+                task.mark_failed("AI agent is not available")
+                await self._task_repository.update_task(task)
+                return
             
+            self._logger.info(f"agent_available | task_id=<{task_id}> | executing_prompt")
+            
+            # Execute the task directly with the agent repository
+            result = await agent_repository.execute_prompt(description, None)
+            
+            self._logger.info(f"task_execution_completed | task_id=<{task_id}> | result_length=<{len(str(result))}>")
+            
+            # Update task with result
+            task.mark_completed(result)
             await self._task_repository.update_task(task)
             
+            self._logger.info(f"task_background_completed | task_id=<{task_id}>")
+            
         except Exception as e:
+            self._logger.error(f"task_background_error | task_id=<{task_id}> | error=<{str(e)}>")
+            
             # Handle any errors in background execution
             try:
                 task = await self._task_repository.get_task_by_id(task_id)
                 if task:
                     task.mark_failed(f"Background execution failed: {str(e)}")
                     await self._task_repository.update_task(task)
-            except Exception:
-                # If we can't even update the task, log would be helpful but we don't have logging here
+                    self._logger.info(f"task_marked_failed | task_id=<{task_id}>")
+            except Exception as update_error:
+                self._logger.error(f"task_update_error | task_id=<{task_id}> | error=<{str(update_error)}>")
                 pass
 
     async def get_task(self, task_id: str) -> Optional[Task]:

@@ -13,7 +13,6 @@ export interface ChatRequest {
 
 export interface ChatResponse {
   response: string
-  task_type: string
   timestamp: string
   conversation_id: string
   message_id: string
@@ -28,13 +27,11 @@ export interface Conversation {
 
 export interface TaskRequest {
   description: string
-  task_type?: string
 }
 
 export interface TaskResponse {
   task_id: string
   description: string
-  task_type: string
   status: string
   result?: string
   error_message?: string
@@ -79,14 +76,7 @@ export interface HealthCheck {
   timestamp: string
 }
 
-export enum TaskType {
-  ANALYSIS = 'analysis',
-  OPTIMIZATION = 'optimization',
-  SECURITY_AUDIT = 'security_audit',
-  TROUBLESHOOTING = 'troubleshooting',
-  DOCUMENTATION = 'documentation',
-  DIAGRAM_GENERATION = 'diagram_generation'
-}
+// Removed TaskType enum - simplified task system
 
 export enum TaskStatus {
   PENDING = 'pending',

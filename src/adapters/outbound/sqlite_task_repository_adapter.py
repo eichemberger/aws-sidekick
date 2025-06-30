@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from core.ports.outbound.task_repository_port import TaskRepositoryPort
-from core.domain.entities.task import Task, TaskStatus, TaskType
+from core.domain.entities.task import Task, TaskStatus
 from infrastructure.logging import get_logger
 
 
@@ -33,7 +33,6 @@ class SQLiteTaskRepositoryAdapter(TaskRepositoryPort):
                 CREATE TABLE IF NOT EXISTS tasks (
                     id TEXT PRIMARY KEY,
                     description TEXT NOT NULL,
-                    task_type TEXT NOT NULL,
                     status TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     completed_at TEXT,
@@ -55,7 +54,6 @@ class SQLiteTaskRepositoryAdapter(TaskRepositoryPort):
         return {
             'id': task.id,
             'description': task.description,
-            'task_type': task.task_type.value,
             'status': task.status.value,
             'created_at': task.created_at.isoformat(),
             'completed_at': task.completed_at.isoformat() if task.completed_at else None,
@@ -69,7 +67,6 @@ class SQLiteTaskRepositoryAdapter(TaskRepositoryPort):
         return Task(
             id=row['id'],
             description=row['description'],
-            task_type=TaskType(row['task_type']),
             status=TaskStatus(row['status']),
             created_at=datetime.fromisoformat(row['created_at']),
             completed_at=datetime.fromisoformat(row['completed_at']) if row['completed_at'] else None,
@@ -80,81 +77,109 @@ class SQLiteTaskRepositoryAdapter(TaskRepositoryPort):
 
     async def save_task(self, task: Task) -> Task:
         """Save a task to the database"""
-        await self._ensure_initialized()
-        async with self._lock:
+        try:
+            await self._ensure_initialized()
+            
             task_dict = self._task_to_dict(task)
             
+            # Simplified without lock for debugging
             async with aiosqlite.connect(self.db_path) as db:
                 await db.execute("""
                     INSERT OR REPLACE INTO tasks 
-                    (id, description, task_type, status, created_at, completed_at, result, error_message, metadata)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, description, status, created_at, completed_at, result, error_message, metadata)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    task_dict['id'], task_dict['description'], task_dict['task_type'],
-                    task_dict['status'], task_dict['created_at'], task_dict['completed_at'],
+                    task_dict['id'], task_dict['description'], task_dict['status'], 
+                    task_dict['created_at'], task_dict['completed_at'],
                     task_dict['result'], task_dict['error_message'], task_dict['metadata']
                 ))
                 await db.commit()
                 
-            self.logger.debug(
+            self.logger.info(
                 "DATABASE | aws-sidekick.persistence | "
                 f"task_id=<{task.id}> status=<{task.status.value}> | Task saved to database"
             )
             return task
+        except Exception as e:
+            self.logger.error(f"Error saving task: {e} | task_id: {task.id}")
+            raise
 
     async def get_task_by_id(self, task_id: str) -> Optional[Task]:
         """Get a task by ID from the database"""
-        await self._ensure_initialized()
-        async with self._lock:
+        try:
+            await self._ensure_initialized()
+            
+            # Simplified without lock for debugging
             async with aiosqlite.connect(self.db_path) as db:
                 db.row_factory = aiosqlite.Row
-                async with db.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)) as cursor:
-                    row = await cursor.fetchone()
+                cursor = await db.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+                row = await cursor.fetchone()
+                await cursor.close()
                     
-                if row:
+            if row:
+                try:
                     task = self._dict_to_task(dict(row))
-                    self.logger.debug(
+                    self.logger.info(
                         "DATABASE | aws-sidekick.persistence | "
                         f"task_id=<{task_id}> | Task retrieved from database"
                     )
                     return task
+                except Exception as e:
+                    self.logger.error(f"Error converting row to task: {e} | task_id: {task_id}")
+                    return None
                     
-                self.logger.debug(
-                    "DATABASE | aws-sidekick.persistence | "
-                    f"task_id=<{task_id}> | Task not found in database"
-                )
-                return None
+            self.logger.info(
+                "DATABASE | aws-sidekick.persistence | "
+                f"task_id=<{task_id}> | Task not found in database"
+            )
+            return None
+        except Exception as e:
+            self.logger.error(f"Error in get_task_by_id: {e} | task_id: {task_id}")
+            return None
 
     async def get_tasks(self, limit: int = 100, offset: int = 0) -> List[Task]:
         """Get list of tasks with pagination"""
-        await self._ensure_initialized()
-        async with self._lock:
+        try:
+            await self._ensure_initialized()
+            
+            # Simplified without lock for debugging
             async with aiosqlite.connect(self.db_path) as db:
                 db.row_factory = aiosqlite.Row
-                async with db.execute(
+                cursor = await db.execute(
                     "SELECT * FROM tasks ORDER BY created_at DESC LIMIT ? OFFSET ?",
                     (limit, offset)
-                ) as cursor:
-                    rows = await cursor.fetchall()
-                    
-                tasks = [self._dict_to_task(dict(row)) for row in rows]
-                self.logger.debug(
-                    "DATABASE | aws-sidekick.persistence | "
-                    f"limit=<{limit}> offset=<{offset}> count=<{len(tasks)}> | Tasks retrieved from database"
                 )
-                return tasks
+                rows = await cursor.fetchall()
+                await cursor.close()
+                    
+            tasks = []
+            for row in rows:
+                try:
+                    task = self._dict_to_task(dict(row))
+                    tasks.append(task)
+                except Exception as e:
+                    self.logger.error(f"Error converting row to task: {e} | row: {dict(row)}")
+                    continue
+                    
+            self.logger.info(
+                "DATABASE | aws-sidekick.persistence | "
+                f"limit=<{limit}> offset=<{offset}> count=<{len(tasks)}> | Tasks retrieved from database"
+            )
+            return tasks
+        except Exception as e:
+            self.logger.error(f"Error in get_tasks: {e}")
+            return []
 
     async def update_task(self, task: Task) -> Task:
         """Update an existing task"""
-        await self._ensure_initialized()
-        async with self._lock:
-            # Check if task exists
-            existing_task = await self.get_task_by_id(task.id)
-            if not existing_task:
-                raise ValueError(f"Task with ID {task.id} not found")
-                
-            # Save the updated task
+        try:
+            await self._ensure_initialized()
+            
+            # Just save the task directly - no need to check if it exists
             return await self.save_task(task)
+        except Exception as e:
+            self.logger.error(f"Error updating task: {e} | task_id: {task.id}")
+            raise
 
     async def delete_task(self, task_id: str) -> bool:
         """Delete a task from the database"""
@@ -225,21 +250,4 @@ class SQLiteTaskRepositoryAdapter(TaskRepositoryPort):
                 )
                 return tasks
 
-    async def get_tasks_by_type(self, task_type: TaskType) -> List[Task]:
-        """Get tasks by type"""
-        await self._ensure_initialized()
-        async with self._lock:
-            async with aiosqlite.connect(self.db_path) as db:
-                db.row_factory = aiosqlite.Row
-                async with db.execute(
-                    "SELECT * FROM tasks WHERE task_type = ? ORDER BY created_at DESC",
-                    (task_type.value,)
-                ) as cursor:
-                    rows = await cursor.fetchall()
-                    
-                tasks = [self._dict_to_task(dict(row)) for row in rows]
-                self.logger.debug(
-                    "DATABASE | aws-sidekick.persistence | "
-                    f"type=<{task_type.value}> count=<{len(tasks)}> | Tasks by type retrieved from database"
-                )
-                return tasks 
+    # Removed get_tasks_by_type method - simplified task system 

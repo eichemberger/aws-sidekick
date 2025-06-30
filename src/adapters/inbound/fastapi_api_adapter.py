@@ -13,7 +13,7 @@ import pathlib
 from core.ports.inbound.task_service_port import TaskServicePort
 from core.ports.inbound.aws_service_port import AWSServicePort
 from core.ports.inbound.chat_service_port import ChatServicePort
-from core.domain.entities.task import TaskType
+# Removed TaskType import - simplified to just background task execution
 from core.domain.value_objects.aws_credentials import AWSCredentials
 from infrastructure.config import get_config
 from infrastructure.logging import get_logger
@@ -23,13 +23,11 @@ from infrastructure.dependency_injection import get_container
 # Pydantic models for API requests/responses
 class TaskRequest(BaseModel):
     description: str = Field(..., description="Description of the task to execute")
-    task_type: Optional[str] = Field(None, description="Type of task (analysis, optimization, security_audit, etc.)")
 
 
 class TaskResponse(BaseModel):
     task_id: str
     description: str
-    task_type: str
     status: str
     result: Optional[str] = None
     error_message: Optional[str] = None
@@ -45,7 +43,6 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
-    task_type: str
     timestamp: datetime
     conversation_id: str
     message_id: str
@@ -163,6 +160,37 @@ class FastAPIAdapter:
                 "timestamp": datetime.now().isoformat()
             }
 
+        @self._app.get("/api/debug/tasks", summary="Debug tasks endpoint")
+        async def debug_tasks():
+            """Debug endpoint to test task retrieval"""
+            try:
+                start_time = datetime.now()
+                tasks = await self._task_service.get_tasks(limit=5, offset=0)
+                end_time = datetime.now()
+                duration = (end_time - start_time).total_seconds()
+                
+                return {
+                    "status": "success",
+                    "task_count": len(tasks),
+                    "duration_seconds": duration,
+                    "timestamp": datetime.now().isoformat(),
+                    "tasks": [
+                        {
+                            "id": task.id,
+                            "description": task.description[:50] + "..." if len(task.description) > 50 else task.description,
+                            "status": task.status.value,
+                            "created_at": task.created_at.isoformat()
+                        }
+                        for task in tasks
+                    ]
+                }
+            except Exception as e:
+                return {
+                    "status": "error", 
+                    "error": str(e),
+                    "timestamp": datetime.now().isoformat()
+                }
+
         @self._app.post("/api/chat", response_model=ChatResponse, summary="Chat with the agent")
         async def chat(request: ChatRequest):
             """Send a message to the agent and get immediate response with persistence"""
@@ -181,9 +209,6 @@ class FastAPIAdapter:
                     conversation.id, 'user', request.message
                 )
                 
-                # Classify the user input
-                task_type = self._classify_user_input(request.message)
-                
                 # Execute using the dedicated chat method for better responsiveness
                 result = await self._agent_repository.execute_chat_prompt(request.message)
                 
@@ -197,7 +222,6 @@ class FastAPIAdapter:
                 
                 return ChatResponse(
                     response=cleaned_response,
-                    task_type=task_type.value,
                     timestamp=assistant_message.timestamp,
                     conversation_id=conversation.id,
                     message_id=assistant_message.id
@@ -217,7 +241,6 @@ class FastAPIAdapter:
                 
                 return ChatResponse(
                     response=error_msg,
-                    task_type="error",
                     timestamp=datetime.now(),
                     conversation_id=getattr(locals().get('conversation'), 'id', 'unknown'),
                     message_id=str(uuid.uuid4())
@@ -227,11 +250,8 @@ class FastAPIAdapter:
         async def chat_async(request: ChatRequest):
             """Send a message to the agent and execute in background"""
             try:
-                # Classify the user input
-                task_type = self._classify_user_input(request.message)
-                
                 # Execute the task asynchronously (returns immediately)
-                task_id = await self._task_service.execute_task_async(request.message, task_type)
+                task_id = await self._task_service.execute_task_async(request.message)
                 
                 return TaskCreatedResponse(
                     task_id=task_id,
@@ -246,17 +266,8 @@ class FastAPIAdapter:
         async def execute_task(request: TaskRequest):
             """Execute a task asynchronously and return task ID immediately"""
             try:
-                # Determine task type
-                if request.task_type:
-                    try:
-                        task_type = TaskType(request.task_type.upper())
-                    except ValueError:
-                        task_type = self._classify_user_input(request.description)
-                else:
-                    task_type = self._classify_user_input(request.description)
-                
                 # Execute task asynchronously (returns immediately)
-                task_id = await self._task_service.execute_task_async(request.description, task_type)
+                task_id = await self._task_service.execute_task_async(request.description)
                 
                 return TaskCreatedResponse(
                     task_id=task_id,
@@ -277,7 +288,6 @@ class FastAPIAdapter:
                     TaskResponse(
                         task_id=task.id,
                         description=task.description,
-                        task_type=task.task_type.value,
                         status=task.status.value,
                         result=self._clean_response(task.result) if task.result else None,
                         error_message=task.error_message,
@@ -303,7 +313,6 @@ class FastAPIAdapter:
                 return TaskResponse(
                     task_id=task.id,
                     description=task.description,
-                    task_type=task.task_type.value,
                     status=task.status.value,
                     result=self._clean_response(task.result) if task.result else None,
                     error_message=task.error_message,
@@ -337,7 +346,7 @@ class FastAPIAdapter:
             """Perform AWS infrastructure analysis in background"""
             try:
                 description = "Analyze AWS infrastructure and provide recommendations"
-                task_id = await self._task_service.execute_task_async(description, TaskType.ANALYSIS)
+                task_id = await self._task_service.execute_task_async(description)
                 
                 return TaskCreatedResponse(
                     task_id=task_id,
@@ -353,7 +362,7 @@ class FastAPIAdapter:
             """Perform AWS security audit in background"""
             try:
                 description = "Perform comprehensive security audit of AWS resources"
-                task_id = await self._task_service.execute_task_async(description, TaskType.SECURITY_AUDIT)
+                task_id = await self._task_service.execute_task_async(description)
                 
                 return TaskCreatedResponse(
                     task_id=task_id,
@@ -369,7 +378,7 @@ class FastAPIAdapter:
             """Perform AWS cost analysis and optimization in background"""
             try:
                 description = "Analyze AWS costs and provide optimization recommendations"
-                task_id = await self._task_service.execute_task_async(description, TaskType.OPTIMIZATION)
+                task_id = await self._task_service.execute_task_async(description)
                 
                 return TaskCreatedResponse(
                     task_id=task_id,
@@ -587,23 +596,7 @@ class FastAPIAdapter:
             # Serve the index.html file for SPA routing
             return FileResponse(str(index_file))
 
-    def _classify_user_input(self, user_input: str) -> TaskType:
-        """Classify user input to determine appropriate task type"""
-        user_input_lower = user_input.lower()
-        
-        # Keywords for different task types
-        if any(word in user_input_lower for word in ['cost', 'billing', 'expense', 'money', 'optimize', 'save']):
-            return TaskType.OPTIMIZATION
-        elif any(word in user_input_lower for word in ['security', 'audit', 'vulnerability', 'secure', 'permission', 'iam']):
-            return TaskType.SECURITY_AUDIT
-        elif any(word in user_input_lower for word in ['diagram', 'architecture', 'visual', 'draw', 'chart']):
-            return TaskType.DIAGRAM_GENERATION
-        elif any(word in user_input_lower for word in ['troubleshoot', 'problem', 'issue', 'error', 'fix', 'debug']):
-            return TaskType.TROUBLESHOOTING
-        elif any(word in user_input_lower for word in ['document', 'documentation', 'explain', 'describe']):
-            return TaskType.DOCUMENTATION
-        else:
-            return TaskType.ANALYSIS
+    # Removed _classify_user_input method - simplified task system
 
     def _clean_response(self, response):
         """Clean and format response from agent"""

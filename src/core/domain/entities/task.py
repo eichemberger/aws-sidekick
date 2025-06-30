@@ -11,14 +11,7 @@ class TaskStatus(Enum):
     FAILED = "failed"
 
 
-class TaskType(Enum):
-    ANALYSIS = "analysis"
-    OPTIMIZATION = "optimization"
-    TROUBLESHOOTING = "troubleshooting"
-    DEPLOYMENT = "deployment"
-    SECURITY_AUDIT = "security_audit"
-    DOCUMENTATION = "documentation"
-    DIAGRAM_GENERATION = "diagram_generation"
+# Removed TaskType enum - simplified task system
 
 
 @dataclass
@@ -26,7 +19,6 @@ class Task:
     """Domain entity representing a cloud engineering task"""
     id: str
     description: str
-    task_type: TaskType
     status: TaskStatus = TaskStatus.PENDING
     created_at: datetime = None
     completed_at: Optional[datetime] = None

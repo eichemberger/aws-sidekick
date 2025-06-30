@@ -1,18 +1,18 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
-from core.domain.entities.task import Task, TaskType
+from core.domain.entities.task import Task
 
 
 class TaskServicePort(ABC):
     """Inbound port for task management operations"""
 
     @abstractmethod
-    async def execute_task(self, description: str, task_type: TaskType) -> Task:
+    async def execute_task(self, description: str) -> Task:
         """Execute a cloud engineering task (waits for completion)"""
         pass
 
     @abstractmethod
-    async def execute_task_async(self, description: str, task_type: TaskType) -> str:
+    async def execute_task_async(self, description: str) -> str:
         """Execute a cloud engineering task asynchronously (returns task ID immediately)"""
         pass
 
