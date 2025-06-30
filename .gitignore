@@ -88,6 +88,9 @@ Pipfile.lock
 # PEP 582
 __pypackages__/
 
+# ruff
+.ruff_cache/
+
 # Celery
 celerybeat-schedule
 celerybeat.pid
