@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 // Lazy load route components for better performance and code splitting
 const ChatView = () => import('@/views/ChatView.vue')
 const TasksView = () => import('@/views/TasksView.vue')
+const TaskDetailView = () => import('@/views/TaskDetailView.vue')
 const AwsView = () => import('@/views/AwsView.vue')
 
 const router = createRouter({
@@ -32,6 +33,15 @@ const router = createRouter({
       meta: {
         title: 'Tasks'
       }
+    },
+    {
+      path: '/tasks/:id',
+      name: 'task-detail',
+      component: TaskDetailView,
+      meta: {
+        title: 'Task Details'
+      },
+      props: true
     },
     {
       path: '/aws',
