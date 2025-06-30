@@ -267,6 +267,83 @@ class APIConfig:
 
 
 @dataclass(frozen=True)
+class SystemPromptConfig:
+    """Configuration for system prompts"""
+    prompt: str = ""
+    
+    @classmethod
+    def from_yaml(cls, yaml_path: str = "config/system-prompt.yaml") -> 'SystemPromptConfig':
+        """Load system prompt configuration from YAML file"""
+        yaml_file = Path(yaml_path)
+        
+        if not yaml_file.exists():
+            # Create default config file if it doesn't exist
+            cls._create_default_yaml(yaml_file)
+            logger.info(f"created_default_system_prompt | path=<{yaml_path}>")
+        
+        try:
+            with open(yaml_file, 'r') as f:
+                config_data = yaml.safe_load(f)
+            
+            system_prompt = config_data.get('system_prompt', '')
+            
+            logger.info(f"loaded_system_prompt | length=<{len(system_prompt)}> | file=<{yaml_path}>")
+            
+            return cls(prompt=system_prompt)
+            
+        except Exception as e:
+            logger.error(f"failed_to_load_system_prompt | file=<{yaml_path}> | error=<{str(e)}>")
+            # Fall back to default prompt
+            return cls.default()
+    
+    @staticmethod
+    def _create_default_yaml(yaml_path: Path) -> None:
+        """Create a default system prompt YAML configuration file"""
+        default_config = {
+            'system_prompt': """You are a Senior AWS Cloud Engineer with deep expertise in cloud infrastructure, automation, and DevOps practices. 
+You don't just provide advice - you execute solutions and get things done.
+
+Your Communication Style:
+- For simple questions: provide concise, direct answers
+- For complex questions: provide comprehensive analysis and detailed recommendations
+- For infrastructure changes: ONLY execute when given explicit, clear commands
+
+General Principles:
+- Always consider security, cost optimization, and operational excellence
+- Use infrastructure as code whenever possible for repeatability
+- Follow AWS Well-Architected Framework principles
+
+IMPORTANT: Never include <thinking> tags or expose your internal thought process in responses."""
+        }
+        
+        # Ensure directory exists
+        yaml_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(yaml_path, 'w') as f:
+            yaml.dump(default_config, f, default_flow_style=False, indent=2)
+    
+    @classmethod
+    def default(cls) -> 'SystemPromptConfig':
+        """Get fallback default system prompt"""
+        default_prompt = """You are a Senior AWS Cloud Engineer with deep expertise in cloud infrastructure, automation, and DevOps practices. 
+You don't just provide advice - you execute solutions and get things done.
+
+Your Communication Style:
+- For simple questions: provide concise, direct answers
+- For complex questions: provide comprehensive analysis and detailed recommendations
+- For infrastructure changes: ONLY execute when given explicit, clear commands
+
+General Principles:
+- Always consider security, cost optimization, and operational excellence
+- Use infrastructure as code whenever possible for repeatability
+- Follow AWS Well-Architected Framework principles
+
+IMPORTANT: Never include <thinking> tags or expose your internal thought process in responses."""
+        
+        return cls(prompt=default_prompt)
+
+
+@dataclass(frozen=True)
 class Config:
     """Main application configuration"""
     model: ModelConfig
@@ -274,6 +351,7 @@ class Config:
     github: GitHubConfig
     database: DatabaseConfig
     mcp: MCPConfig
+    system_prompt: SystemPromptConfig
     api: APIConfig
     debug: bool = False
     environment: str = "development"
@@ -334,6 +412,9 @@ class Config:
                 )
                 mcp = MCPConfig(servers={**mcp.servers, 'github': github_server_with_env})
         
+        # System prompt configuration
+        system_prompt = SystemPromptConfig.from_yaml()
+        
         # API configuration
         api = APIConfig(
             title=os.getenv("API_TITLE", "AWS Cloud Engineer Agent API"),
@@ -347,6 +428,7 @@ class Config:
             github=github,
             database=database,
             mcp=mcp,
+            system_prompt=system_prompt,
             api=api,
             debug=os.getenv("DEBUG", "false").lower() == "true",
             environment=os.getenv("ENVIRONMENT", "development")

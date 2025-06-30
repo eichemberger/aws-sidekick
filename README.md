@@ -216,6 +216,108 @@ The application automatically creates the following tables:
 
 ## 🔧 Configuration Reference
 
+### Configuration Files
+
+AWS Sidekick uses YAML configuration files in the `config/` directory to control agent behavior and tool integrations:
+
+| File | Purpose | When to Modify |
+|------|---------|----------------|
+| `system-prompt.yaml` | Defines the AI agent's personality, expertise, and behavior | Customize agent behavior or add new capabilities |
+| `mcp-config.yaml` | Configures MCP servers that provide tools and integrations | Enable/disable specific AWS services or add new tools |
+
+#### system-prompt.yaml
+
+Controls the AI agent's role as a Senior AWS Cloud Engineer, including:
+- **Role Definition**: Establishes expertise areas and capabilities
+- **Communication Style**: Adaptive responses based on question complexity
+- **Safety Guidelines**: Rules for infrastructure changes and destructive operations
+- **Execution Standards**: Default behaviors and best practices
+
+**Example customization:**
+```yaml
+system_prompt: |
+  **Custom Principles:**
+  - Always use least privilege IAM policies
+  - Implement multi-region deployments for production
+  - Include cost estimates for infrastructure changes
+```
+
+#### mcp-config.yaml
+
+Configures MCP (Model Context Protocol) servers that extend the agent's capabilities:
+
+**Structure:**
+```yaml
+mcp_servers:
+  server_name:
+    enabled: true/false          # Whether to load this server
+    command: uvx/npx/python     # Command to run the server
+    args: [...]                 # Arguments passed to the command
+    env:                        # Environment variables (optional)
+      VAR_NAME: "${VAR_VALUE}"
+    description: "..."          # Human-readable description
+```
+
+**Example MCP Servers:**
+
+*Pre-configured (in config/mcp-config.yaml):*
+- `aws_docs` - AWS documentation and service information
+- `aws_diagram` - Generate AWS architecture diagrams
+- `github` - GitHub repository management (requires `GITHUB_PERSONAL_ACCESS_TOKEN`)
+- `cdk` - AWS CDK infrastructure as code
+- `terraform` - Terraform infrastructure management
+- `cost_explorer` - AWS cost analysis and optimization
+- `cloudwatch` - CloudWatch logs querying and analysis
+
+**Add any MCP server:**
+```yaml
+# Community MCP servers
+filesystem:
+  enabled: true
+  command: npx
+  args:
+    - "@modelcontextprotocol/server-filesystem"
+    - "/path/to/allowed/directory"
+  description: "File system operations"
+
+postgres:
+  enabled: true
+  command: uvx
+  args:
+    - "mcp-server-postgres"
+  env:
+    POSTGRES_CONNECTION_STRING: "${DATABASE_URL}"
+  description: "PostgreSQL database operations"
+
+# Custom Python MCP server
+custom_tools:
+  enabled: true
+  command: python
+  args:
+    - "/path/to/your/custom_mcp_server.py"
+  env:
+    API_KEY: "${YOUR_API_KEY}"
+    CUSTOM_CONFIG: "value"
+  description: "Your custom tools and integrations"
+
+# Docker-based MCP server
+docker_mcp:
+  enabled: true
+  command: docker
+  args:
+    - "run"
+    - "--rm"
+    - "-i"
+    - "your-org/custom-mcp-server:latest"
+  description: "Containerized MCP server"
+```
+
+**Find MCP servers:**
+- **AWS Labs**: https://github.com/awslabs/mcp - Official AWS MCP servers
+- **Official Community**: https://github.com/modelcontextprotocol/servers - Maintained by MCP team
+- **Community Registry**: https://github.com/modelcontextprotocol/registry - Community contributions
+- **Build Your Own**: https://modelcontextprotocol.io/docs - MCP protocol specification
+
 ### Environment Variables
 
 | Variable | Required | Default | Description |
@@ -226,22 +328,27 @@ The application automatically creates the following tables:
 | `MODEL_ID` | No | Auto-detected | Specific model ID |
 | `AWS_DEFAULT_REGION` | No | `us-east-1` | Default AWS region |
 | `AWS_PROFILE` | No | `default` | AWS profile to use |
-| `GITHUB_PERSONAL_ACCESS_TOKEN` | No | - | GitHub API token |
+| `GITHUB_PERSONAL_ACCESS_TOKEN` | No | - | GitHub API token (required for GitHub MCP server) |
 | `API_HOST` | No | `0.0.0.0` | API server host |
 | `API_PORT` | No | `8000` | API server port |
 | `DEBUG` | No | `false` | Enable debug mode |
 
-### MCP Server Configuration
+### Configuration Best Practices
 
-AWS Sidekick integrates with multiple MCP servers:
+**Security:**
+- Store sensitive values (API keys, tokens) in environment variables
+- Use `"${VAR_NAME}"` syntax in YAML files to reference environment variables
+- Never commit secrets directly to configuration files
 
-- **AWS Documentation**: AWS service documentation and best practices
-- **AWS Diagrams**: Infrastructure diagram generation
-- **CDK Server**: AWS CDK code generation and management
-- **Terraform Server**: Terraform configuration management
-- **Cost Explorer**: AWS cost analysis and optimization
-- **CloudWatch**: Log analysis and monitoring
-- **GitHub**: Repository management (if token provided)
+**Performance:**
+- Only enable MCP servers you actively use
+- Monitor resource usage if running many servers
+- Use `@latest` versions for AWS Labs servers to get updates
+
+**Maintenance:**
+- Test configuration changes in development first
+- Restart the application after modifying configuration files
+- Check logs for MCP server connection issues
 
 ## 📚 Usage
 
