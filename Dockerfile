@@ -30,7 +30,7 @@ RUN uv pip install --system --no-cache-dir .
 COPY src/ ./src/
 COPY api.py ./
 COPY main.py ./
-COPY env.example ./
+COPY config/ ./config/
 
 COPY --from=client-builder /app/client/dist ./client/dist
 
