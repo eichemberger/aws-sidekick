@@ -46,7 +46,7 @@
       <!-- Credential Type Selector -->
       <div class="mb-6">
         <label class="text-sm font-medium text-primary mb-3 block">Credential Type</label>
-        <div class="flex space-x-4">
+        <div class="flex flex-wrap gap-4">
           <label class="flex items-center">
             <input
               v-model="credentialType"
@@ -65,6 +65,15 @@
             />
             <span class="ml-2 text-sm text-secondary">AWS Profile</span>
           </label>
+          <label class="flex items-center">
+            <input
+              v-model="credentialType"
+              type="radio"
+              value="sso-export"
+              class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+            />
+            <span class="ml-2 text-sm text-secondary">SSO Export</span>
+          </label>
         </div>
       </div>
 
@@ -81,7 +90,7 @@
               v-model="form.access_key_id"
               type="text"
               required
-              placeholder="AKIAIOSFODNN7EXAMPLE"
+              placeholder="Your AWS Access Key ID"
               class="input-field"
             />
           </div>
@@ -95,7 +104,7 @@
               v-model="form.secret_access_key"
               type="password"
               required
-              placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+              placeholder="Your AWS Secret Access Key"
               class="input-field"
             />
           </div>
@@ -108,7 +117,7 @@
               id="sessionToken"
               v-model="form.session_token"
               type="password"
-              placeholder="Temporary session token for assumed roles"
+              placeholder="Your AWS Session Token (if applicable)"
               class="input-field"
             />
           </div>
@@ -131,6 +140,56 @@
             <p class="text-xs text-muted mt-1">
               Profile name from ~/.aws/credentials or ~/.aws/config
             </p>
+          </div>
+        </div>
+
+        <!-- SSO Export Form -->
+        <div v-else-if="credentialType === 'sso-export'" class="space-y-4">
+          <div>
+            <label for="ssoExport" class="block text-sm font-medium text-primary mb-1">
+              Paste AWS SSO Export Commands *
+            </label>
+            <textarea
+              id="ssoExport"
+              v-model="ssoExportText"
+              @input="parseSsoExport"
+              rows="6"
+              required
+              placeholder="Paste the export commands from AWS SSO:&#10;export AWS_ACCESS_KEY_ID=&quot;...&quot;&#10;export AWS_SECRET_ACCESS_KEY=&quot;...&quot;&#10;export AWS_SESSION_TOKEN=&quot;...&quot;"
+              class="input-field font-mono text-sm"
+            />
+            <p class="text-xs text-muted mt-1">
+              Copy and paste the export commands directly from AWS SSO or CLI
+            </p>
+          </div>
+          
+          <!-- Parsed Credentials Preview -->
+          <div v-if="parsedSsoCredentials.access_key_id" class="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+            <h4 class="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">Parsed Credentials</h4>
+            <div class="space-y-1 text-xs text-blue-700 dark:text-blue-200">
+              <div class="flex">
+                <span class="font-medium w-32">Access Key ID:</span>
+                <span class="font-mono">{{ parsedSsoCredentials.access_key_id.substring(0, 10) }}...</span>
+              </div>
+                             <div class="flex">
+                 <span class="font-medium w-32">Secret Key:</span>
+                 <span class="font-mono">{{ parsedSsoCredentials.secret_access_key ? '***' + parsedSsoCredentials.secret_access_key.slice(-4) : 'Not found' }}</span>
+               </div>
+               <div class="flex">
+                 <span class="font-medium w-32">Session Token:</span>
+                 <span class="font-mono">{{ parsedSsoCredentials.session_token ? '***' + parsedSsoCredentials.session_token.slice(-4) : 'Not found' }}</span>
+               </div>
+            </div>
+          </div>
+
+          <!-- Parse Error -->
+          <div v-if="ssoParseError" class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+            <div class="flex">
+              <XCircleIcon class="h-5 w-5 text-red-600 dark:text-red-300 flex-shrink-0" />
+              <div class="ml-2">
+                <p class="text-sm text-red-800 dark:text-red-300">{{ ssoParseError }}</p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -247,7 +306,7 @@ import type { AWSCredentialsRequest, AWSCredentialsValidation } from '@/types/ap
 const awsStore = useAwsStore()
 
 // Form state
-const credentialType = ref<'keys' | 'profile'>('keys')
+const credentialType = ref<'keys' | 'profile' | 'sso-export'>('sso-export')
 const form = ref<AWSCredentialsRequest>({
   access_key_id: '',
   secret_access_key: '',
@@ -255,6 +314,15 @@ const form = ref<AWSCredentialsRequest>({
   region: 'us-east-1',
   profile: ''
 })
+
+// SSO Export state
+const ssoExportText = ref('')
+const parsedSsoCredentials = ref({
+  access_key_id: '',
+  secret_access_key: '',
+  session_token: ''
+})
+const ssoParseError = ref<string | null>(null)
 
 // UI state
 const isLoading = ref(false)
@@ -266,16 +334,30 @@ const validationResult = ref<AWSCredentialsValidation | null>(null)
 const isFormValid = computed(() => {
   if (credentialType.value === 'keys') {
     return !!(form.value.access_key_id && form.value.secret_access_key && form.value.region)
-  } else {
+  } else if (credentialType.value === 'profile') {
     return !!(form.value.profile && form.value.region)
+  } else if (credentialType.value === 'sso-export') {
+    return !!(parsedSsoCredentials.value.access_key_id && parsedSsoCredentials.value.secret_access_key && form.value.region)
   }
+  return false
 })
 
 // Watch credential type changes to clear form
 watch(credentialType, (newType) => {
   if (newType === 'keys') {
     form.value.profile = ''
-  } else {
+    ssoExportText.value = ''
+    parsedSsoCredentials.value = { access_key_id: '', secret_access_key: '', session_token: '' }
+    ssoParseError.value = null
+  } else if (newType === 'profile') {
+    form.value.access_key_id = ''
+    form.value.secret_access_key = ''
+    form.value.session_token = ''
+    ssoExportText.value = ''
+    parsedSsoCredentials.value = { access_key_id: '', secret_access_key: '', session_token: '' }
+    ssoParseError.value = null
+  } else if (newType === 'sso-export') {
+    form.value.profile = ''
     form.value.access_key_id = ''
     form.value.secret_access_key = ''
     form.value.session_token = ''
@@ -352,6 +434,52 @@ const clearCredentials = async () => {
   }
 }
 
+const parseSsoExport = () => {
+  ssoParseError.value = null
+  parsedSsoCredentials.value = { access_key_id: '', secret_access_key: '', session_token: '' }
+
+  if (!ssoExportText.value.trim()) return
+
+  try {
+    const lines = ssoExportText.value.split('\n')
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim()
+      
+      // Match export AWS_ACCESS_KEY_ID="value" or export AWS_ACCESS_KEY_ID=value
+      const accessKeyMatch = trimmedLine.match(/export\s+AWS_ACCESS_KEY_ID\s*=\s*["']?([^"'\s]+)["']?/)
+      if (accessKeyMatch) {
+        parsedSsoCredentials.value.access_key_id = accessKeyMatch[1]
+        continue
+      }
+      
+      // Match export AWS_SECRET_ACCESS_KEY="value" or export AWS_SECRET_ACCESS_KEY=value
+      const secretKeyMatch = trimmedLine.match(/export\s+AWS_SECRET_ACCESS_KEY\s*=\s*["']?([^"'\s]+)["']?/)
+      if (secretKeyMatch) {
+        parsedSsoCredentials.value.secret_access_key = secretKeyMatch[1]
+        continue
+      }
+      
+      // Match export AWS_SESSION_TOKEN="value" or export AWS_SESSION_TOKEN=value
+      const sessionTokenMatch = trimmedLine.match(/export\s+AWS_SESSION_TOKEN\s*=\s*["']?([^"'\s]+)["']?/)
+      if (sessionTokenMatch) {
+        parsedSsoCredentials.value.session_token = sessionTokenMatch[1]
+        continue
+      }
+    }
+    
+    // Validate that we got the required credentials
+    if (!parsedSsoCredentials.value.access_key_id) {
+      ssoParseError.value = 'AWS_ACCESS_KEY_ID not found in the export commands'
+    } else if (!parsedSsoCredentials.value.secret_access_key) {
+      ssoParseError.value = 'AWS_SECRET_ACCESS_KEY not found in the export commands'
+    }
+    
+  } catch (error) {
+    ssoParseError.value = 'Failed to parse export commands. Please check the format.'
+  }
+}
+
 const createCredentialsObject = (): AWSCredentialsRequest => {
   if (credentialType.value === 'keys') {
     return {
@@ -361,7 +489,7 @@ const createCredentialsObject = (): AWSCredentialsRequest => {
       region: form.value.region,
       profile: undefined
     }
-  } else {
+  } else if (credentialType.value === 'profile') {
     return {
       access_key_id: undefined,
       secret_access_key: undefined,
@@ -369,7 +497,17 @@ const createCredentialsObject = (): AWSCredentialsRequest => {
       region: form.value.region,
       profile: form.value.profile
     }
+  } else if (credentialType.value === 'sso-export') {
+    return {
+      access_key_id: parsedSsoCredentials.value.access_key_id,
+      secret_access_key: parsedSsoCredentials.value.secret_access_key,
+      session_token: parsedSsoCredentials.value.session_token || undefined,
+      region: form.value.region,
+      profile: undefined
+    }
   }
+  
+  throw new Error('Invalid credential type')
 }
 
 // Initialize form with current credentials info
