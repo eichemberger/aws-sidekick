@@ -71,7 +71,7 @@ class TaskApplicationService(TaskServicePort):
                 if task:
                     task.mark_failed(f"Background execution failed: {str(e)}")
                     await self._task_repository.update_task(task)
-            except:
+            except Exception:
                 # If we can't even update the task, log would be helpful but we don't have logging here
                 pass
 

@@ -31,7 +31,7 @@ def test_mcp_config():
             if server.env:
                 print(f'    Environment: {list(server.env.keys())}')
         
-        print(f'\n📊 Configuration Summary:')
+        print('\n📊 Configuration Summary:')
         print(f'  Total servers configured: {len(mcp_config.servers)}')
         print(f'  AWS Documentation: {"✅" if "aws_docs" in mcp_config.servers else "❌"}')
         print(f'  AWS Diagrams: {"✅" if "aws_diagram" in mcp_config.servers else "❌"}')

@@ -1,21 +1,19 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Response
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional, List
-import asyncio
+from typing import Optional, List
 import uuid
 from datetime import datetime
 import re
 import ast
-import os
 import pathlib
 
 from core.ports.inbound.task_service_port import TaskServicePort
 from core.ports.inbound.aws_service_port import AWSServicePort
 from core.ports.inbound.chat_service_port import ChatServicePort
-from core.domain.entities.task import TaskType, TaskStatus
+from core.domain.entities.task import TaskType
 from core.domain.value_objects.aws_credentials import AWSCredentials
 from infrastructure.config import get_config
 from infrastructure.logging import get_logger
@@ -214,7 +212,7 @@ class FastAPIAdapter:
                         await self._chat_service.add_message_to_conversation(
                             conversation.id, 'assistant', error_msg
                         )
-                except:
+                except Exception:
                     pass  # Don't fail the entire request if we can't persist the error
                 
                 return ChatResponse(
@@ -617,7 +615,7 @@ class FastAPIAdapter:
         if not isinstance(response, str):
             try:
                 response = str(response)
-            except:
+            except Exception:
                 return "Error: Could not convert response to string"
         
         # Remove <thinking>...</thinking> blocks
@@ -633,7 +631,7 @@ class FastAPIAdapter:
                         if isinstance(item, dict) and 'text' in item:
                             # Return the text content directly (preserves markdown)
                             return item['text']
-            except:
+            except Exception:
                 # If parsing fails, try regex as fallback
                 match = re.search(r"'text': '(.+?)(?:'}]|})", cleaned, re.DOTALL)
                 if match:

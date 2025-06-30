@@ -7,9 +7,9 @@ AWS credentials change, ensuring that MCP tools use updated credentials.
 
 import os
 import atexit
-from typing import Optional, Tuple, List, Any
+from typing import Tuple, List, Any
 from .config import get_config
-from .logging import get_logger, log_agent_lifecycle, log_model_interaction, log_tool_registration
+from .logging import get_logger, log_agent_lifecycle, log_model_interaction
 
 logger = get_logger(__name__)
 

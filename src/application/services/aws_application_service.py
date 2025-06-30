@@ -7,7 +7,6 @@ from core.ports.outbound.mcp_reinitialization_port import MCPReinitializationPor
 import os
 from infrastructure.config import get_config
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +123,6 @@ class AWSApplicationService(AWSServicePort):
 
     async def list_resources(self, resource_type: ResourceType, region: str = None, credentials: Optional[AWSCredentials] = None) -> List[AWSResource]:
         """List AWS resources of a specific type"""
-        creds = credentials or self._get_credentials()
         # This would need more implementation to convert raw AWS data to domain entities
         # For now, return empty list as placeholder
         return []

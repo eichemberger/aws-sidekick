@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from core.domain.value_objects.aws_credentials import AWSCredentials, AWSAccountInfo
 
 

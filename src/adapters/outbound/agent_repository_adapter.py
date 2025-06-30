@@ -1,8 +1,8 @@
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from contextlib import asynccontextmanager
 from core.ports.outbound.agent_repository_port import AgentRepositoryPort
-from infrastructure.logging import get_logger, log_tool_execution, log_model_interaction
+from infrastructure.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -81,7 +81,7 @@ class AgentRepositoryAdapter(AgentRepositoryPort):
                         future.cancel()
                         raise
                         
-            except asyncio.TimeoutError as e:
+            except asyncio.TimeoutError:
                 if attempt < max_attempts - 1:
                     wait_time = 2 ** attempt  # Exponential backoff
                     logger.warning(f"attempt=<{attempt + 1}/{max_attempts}> | wait_time=<{wait_time}s> | agent operation timed out, retrying")

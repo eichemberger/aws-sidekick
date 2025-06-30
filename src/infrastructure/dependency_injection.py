@@ -5,7 +5,6 @@ This module wires all the components together according to the hexagonal archite
 It handles the creation and configuration of all dependencies.
 """
 
-import os
 from typing import Optional
 from .config import get_config
 from .mcp_manager import get_mcp_manager

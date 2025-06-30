@@ -10,15 +10,17 @@ import uvicorn
 from dotenv import load_dotenv
 from pathlib import Path
 
+# Add src directory to path before importing modules
 current_dir = os.path.dirname(os.path.abspath(__file__))
 src_dir = os.path.join(current_dir, 'src')
 sys.path.insert(0, src_dir)
 
-from infrastructure.dependency_injection import get_container, configure_container
-from infrastructure.logging import get_logger, configure_logging
-from infrastructure.config import get_config
-from adapters.inbound.fastapi_api_adapter import FastAPIAdapter
-from main import initialize_agent
+# Now import the modules (after path setup)
+from infrastructure.dependency_injection import get_container, configure_container  # noqa: E402
+from infrastructure.logging import get_logger, configure_logging  # noqa: E402
+from infrastructure.config import get_config  # noqa: E402
+from adapters.inbound.fastapi_api_adapter import FastAPIAdapter  # noqa: E402
+from main import initialize_agent  # noqa: E402
 
 
 logger = get_logger(__name__)

@@ -6,19 +6,17 @@ This module initializes the hexagonal architecture and launches the application.
 
 import os
 import sys
-import atexit
 from typing import Optional
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core.domain.value_objects.aws_credentials import AWSCredentials
-from infrastructure.dependency_injection import get_container, configure_container
+from infrastructure.dependency_injection import configure_container
 from infrastructure.config import initialize_config, get_config
 from infrastructure.mcp_manager import get_mcp_manager
 from infrastructure.logging import (
-    get_logger, configure_logging, log_agent_lifecycle, 
-    log_tool_registration, log_model_interaction
+    get_logger, configure_logging, log_agent_lifecycle
 )
 
 
@@ -74,9 +72,6 @@ def main():
         agent, docs_tools, diagram_tools, github_tools = initialize_agent()
         
         configure_container(agent, docs_tools, diagram_tools, github_tools)
-        
-        container = get_container()
-        default_credentials = create_default_credentials()
         
         logger.info(**log_agent_lifecycle(
             phase="initialized",

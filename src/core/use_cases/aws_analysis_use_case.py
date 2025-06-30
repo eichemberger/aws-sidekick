@@ -1,6 +1,6 @@
 from typing import List, Dict, Any
 from datetime import datetime
-from core.domain.entities.aws_resource import AWSResource, ResourceType
+from core.domain.entities.aws_resource import ResourceType
 from core.domain.value_objects.aws_credentials import AWSCredentials, AWSAccountInfo
 from core.ports.outbound.aws_client_port import AWSClientPort
 from core.ports.outbound.agent_repository_port import AgentRepositoryPort

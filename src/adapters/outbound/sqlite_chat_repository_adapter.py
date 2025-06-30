@@ -1,5 +1,4 @@
 import aiosqlite
-import uuid
 from datetime import datetime
 from typing import List, Optional
 from src.core.ports.outbound.chat_repository_port import ChatRepositoryPort
