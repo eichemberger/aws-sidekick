@@ -11,7 +11,7 @@ mcp_servers:
     description: "AWS documentation and service information"
 
   aws_diagram:
-    enabled: true
+    enabled: false # not working
     command: uvx
     args:
       - "awslabs.aws-diagram-mcp-server@latest"
