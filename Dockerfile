@@ -12,12 +12,11 @@ COPY client/ ./
 
 RUN pnpm run build
 
-FROM python:3.12-slim AS backend
+FROM python:3.12-alpine AS backend
 
-RUN apt-get update && apt-get install -y \
+RUN apk add --no-cache \
     curl \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+    build-base
 
 RUN pip install uv
 
