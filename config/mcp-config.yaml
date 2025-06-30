@@ -1,0 +1,67 @@
+# MCP Server Configuration
+# Enable/disable and configure MCP servers as needed
+
+mcp_servers:
+  # Core AWS Documentation and Diagrams (recommended to keep enabled)
+  aws_docs:
+    enabled: true
+    command: uvx
+    args:
+      - "awslabs.aws-documentation-mcp-server@latest"
+    description: "AWS documentation and service information"
+
+  aws_diagram:
+    enabled: true
+    command: uvx
+    args:
+      - "awslabs.aws-diagram-mcp-server@latest"
+    description: "Generate AWS architecture diagrams"
+
+  # GitHub Integration (requires GITHUB_PERSONAL_ACCESS_TOKEN)
+  github:
+    enabled: true
+    command: npx
+    args:
+      - "@modelcontextprotocol/server-github"
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+    description: "GitHub repository management and operations"
+
+  # Additional AWS Services (find more at https://github.com/awslabs/mcp)
+  cdk:
+    enabled: false
+    command: uvx
+    args:
+      - "awslabs.cdk-mcp-server@latest"
+    description: "AWS CDK infrastructure as code"
+
+  terraform:
+    enabled: false
+    command: uvx
+    args:
+      - "awslabs.terraform-mcp-server"
+    description: "Terraform infrastructure as code"
+
+  cost_explorer:
+    enabled: false
+    command: uvx
+    args:
+      - "awslabs.cost-explorer-mcp-server"
+    description: "AWS cost analysis and optimization"
+
+  cloudwatch:
+    enabled: false
+    command: uvx
+    args:
+      - "awslabs.cloudwatch-logs-mcp-server"
+    description: "CloudWatch logs querying and analysis"
+
+  # Example custom MCP server (disabled by default)
+  # custom_server:
+  #   enabled: false
+  #   command: python
+  #   args:
+  #     - "/path/to/your/custom/mcp/server.py"
+  #   env:
+  #     CUSTOM_API_KEY: "${CUSTOM_API_KEY}"
+  #   description: "Your custom MCP server" 

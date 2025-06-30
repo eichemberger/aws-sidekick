@@ -120,63 +120,64 @@ class MCPServerManager:
             if config.debug:
                 config.print_status()
 
-            if not config.github.is_available:
-                logger.warning("github_token=<missing> | GitHub MCP server will not be available without this token")
+            # Initialize MCP clients dynamically based on configuration
+            all_tools = []
+            enabled_servers = list(config.mcp.servers.keys())
+            logger.info(f"initializing_mcp_servers | enabled_count=<{len(enabled_servers)}> | servers=<{enabled_servers}>")
 
-            # Initialize AWS Documentation MCP client
-            logger.debug("tool_name=<aws_docs> | registering MCP client")
-            aws_docs_config = config.mcp.servers["aws_docs"]
-            aws_docs_mcp_client = MCPClient(lambda: stdio_client(
-                StdioServerParameters(
-                    command=aws_docs_config.command, 
-                    args=aws_docs_config.args
-                )
-            ))
-            aws_docs_mcp_client.start()
-            self._mcp_clients['aws_docs'] = aws_docs_mcp_client
-            logger.debug("tool_name=<aws_docs> | MCP client started successfully")
-
-            # Initialize AWS Diagram MCP client
-            logger.debug("tool_name=<aws_diagram> | registering MCP client")
-            aws_diagram_config = config.mcp.servers["aws_diagram"]
-            aws_diagram_mcp_client = MCPClient(lambda: stdio_client(
-                StdioServerParameters(
-                    command=aws_diagram_config.command, 
-                    args=aws_diagram_config.args
-                )
-            ))
-            aws_diagram_mcp_client.start()
-            self._mcp_clients['aws_diagram'] = aws_diagram_mcp_client
-            logger.debug("tool_name=<aws_diagram> | MCP client started successfully")
-
-            # Initialize GitHub MCP client if token available
-            github_mcp_client = None
-            github_tools = []
-            if config.github.is_available:
+            # Initialize each enabled MCP server
+            for server_name, server_config in config.mcp.servers.items():
                 try:
-                    logger.debug("tool_name=<github> | registering MCP client")
-                    github_config = config.mcp.servers["github"]
-                    github_mcp_client = MCPClient(lambda: stdio_client(
+                    logger.debug(f"tool_name=<{server_name}> | registering MCP client | description=<{server_config.description or 'N/A'}>")
+                    
+                    # Prepare environment for the server
+                    server_env = server_config.env.copy() if server_config.env else {}
+                    
+                    # For GitHub server, ensure token is set
+                    if server_name == "github" and not config.github.is_available:
+                        logger.warning(f"tool_name=<{server_name}> | skipping | github_token not available")
+                        continue
+                    
+                    mcp_client = MCPClient(lambda sc=server_config, se=server_env: stdio_client(
                         StdioServerParameters(
-                            command=github_config.command, 
-                            args=github_config.args,
-                            env=github_config.env
+                            command=sc.command,
+                            args=sc.args,
+                            env=se if se else None
                         )
                     ))
-                    github_mcp_client.start()
-                    self._mcp_clients['github'] = github_mcp_client
-                    github_tools = github_mcp_client.list_tools_sync()
-                    logger.debug(f"tool_name=<github> | loaded tool count=<{len(github_tools)}>")
+                    mcp_client.start()
+                    self._mcp_clients[server_name] = mcp_client
+                    
+                    # Get tools from this server
+                    server_tools = mcp_client.list_tools_sync()
+                    all_tools.extend(server_tools)
+                    
+                    logger.debug(f"tool_name=<{server_name}> | MCP client started successfully | tool_count=<{len(server_tools)}>")
+                    
                 except Exception as e:
-                    logger.warning(f"tool_name=<github> | initialization failed | {str(e)}")
-                    github_mcp_client = None
-                    github_tools = []
-
-            # Get tools from MCP clients
-            docs_tools = aws_docs_mcp_client.list_tools_sync()
-            diagram_tools = aws_diagram_mcp_client.list_tools_sync()
+                    logger.warning(f"tool_name=<{server_name}> | initialization failed | {str(e)}")
+                    continue
             
-            logger.debug(f"tool_count=<{len(docs_tools) + len(diagram_tools) + len(github_tools) + 1}> | tools configured")
+            # For backwards compatibility, separate tools by type (this can be simplified later)
+            docs_tools = []
+            diagram_tools = []
+            github_tools = []
+            
+            # Categorize tools based on their server source
+            for server_name, client in self._mcp_clients.items():
+                try:
+                    server_tools = client.list_tools_sync()
+                    if 'docs' in server_name.lower():
+                        docs_tools.extend(server_tools)
+                    elif 'diagram' in server_name.lower():
+                        diagram_tools.extend(server_tools)
+                    elif 'github' in server_name.lower():
+                        github_tools.extend(server_tools)
+                    # Other tools are available but not categorized for now
+                except Exception as e:
+                    logger.warning(f"tool_name=<{server_name}> | failed to get tools | {str(e)}")
+            
+            logger.debug(f"tool_count=<{len(all_tools)}> | categorized | docs=<{len(docs_tools)}> | diagram=<{len(diagram_tools)}> | github=<{len(github_tools)}>")
 
             # Initialize AI model
             logger.debug(**log_model_interaction(

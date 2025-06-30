@@ -6,9 +6,20 @@ and provides validation with helpful error messages.
 """
 
 import os
+import re
+import yaml
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 from pathlib import Path
+
+
+def get_logger(name: str):
+    """Simple logger function to avoid circular imports"""
+    import logging
+    return logging.getLogger(name)
+
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -105,7 +116,9 @@ class MCPServerConfig:
     """Configuration for a single MCP server"""
     command: str
     args: List[str]
+    enabled: bool = True
     env: Optional[Dict[str, str]] = None
+    description: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -114,37 +127,113 @@ class MCPConfig:
     servers: Dict[str, MCPServerConfig] = field(default_factory=dict)
     
     @classmethod
+    def from_yaml(cls, yaml_path: str = "config/mcp-config.yaml") -> 'MCPConfig':
+        """Load MCP server configuration from YAML file"""
+        yaml_file = Path(yaml_path)
+        
+        if not yaml_file.exists():
+            # Create default config file if it doesn't exist
+            cls._create_default_yaml(yaml_file)
+            logger.info(f"created_default_mcp_config | path=<{yaml_path}>")
+        
+        try:
+            with open(yaml_file, 'r') as f:
+                config_data = yaml.safe_load(f)
+            
+            servers = {}
+            mcp_servers_config = config_data.get('mcp_servers', {})
+            
+            for server_name, server_config in mcp_servers_config.items():
+                # Expand environment variables in configuration
+                expanded_config = cls._expand_env_vars(server_config)
+                
+                servers[server_name] = MCPServerConfig(
+                    command=expanded_config['command'],
+                    args=expanded_config.get('args', []),
+                    enabled=expanded_config.get('enabled', True),
+                    env=expanded_config.get('env'),
+                    description=expanded_config.get('description')
+                )
+            
+            # Only return enabled servers
+            enabled_servers = {k: v for k, v in servers.items() if v.enabled}
+            
+            logger.info(f"loaded_mcp_config | total_servers=<{len(servers)}> | enabled_servers=<{len(enabled_servers)}> | file=<{yaml_path}>")
+            
+            return cls(servers=enabled_servers)
+            
+        except Exception as e:
+            logger.error(f"failed_to_load_mcp_config | file=<{yaml_path}> | error=<{str(e)}>")
+            # Fall back to default configuration
+            return cls.default()
+    
+    @staticmethod
+    def _expand_env_vars(config: Dict[str, Any]) -> Dict[str, Any]:
+        """Recursively expand environment variables in configuration"""
+        if isinstance(config, dict):
+            return {k: MCPConfig._expand_env_vars(v) for k, v in config.items()}
+        elif isinstance(config, list):
+            return [MCPConfig._expand_env_vars(item) for item in config]
+        elif isinstance(config, str):
+            # Replace ${VAR_NAME} with environment variable value
+            def replace_env_var(match):
+                var_name = match.group(1)
+                return os.getenv(var_name, match.group(0))  # Return original if not found
+            
+            return re.sub(r'\$\{([^}]+)\}', replace_env_var, config)
+        else:
+            return config
+    
+    @staticmethod
+    def _create_default_yaml(yaml_path: Path) -> None:
+        """Create a default YAML configuration file"""
+        default_config = {
+            'mcp_servers': {
+                'aws_docs': {
+                    'enabled': True,
+                    'command': 'uvx',
+                    'args': ['awslabs.aws-documentation-mcp-server@latest'],
+                    'description': 'AWS documentation and service information'
+                },
+                'aws_diagram': {
+                    'enabled': True,
+                    'command': 'uvx',
+                    'args': ['awslabs.aws-diagram-mcp-server@latest'],
+                    'description': 'Generate AWS architecture diagrams'
+                },
+                'github': {
+                    'enabled': True,
+                    'command': 'npx',
+                    'args': ['@modelcontextprotocol/server-github'],
+                    'env': {
+                        'GITHUB_PERSONAL_ACCESS_TOKEN': '${GITHUB_PERSONAL_ACCESS_TOKEN}'
+                    },
+                    'description': 'GitHub repository management and operations'
+                }
+            }
+        }
+        
+        # Ensure directory exists
+        yaml_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(yaml_path, 'w') as f:
+            yaml.dump(default_config, f, default_flow_style=False, indent=2)
+    
+    @classmethod  
     def default(cls) -> 'MCPConfig':
-        """Get default MCP server configuration"""
+        """Get fallback default MCP server configuration"""
         return cls(servers={
             "aws_docs": MCPServerConfig(
                 command="uvx",
-                args=["awslabs.aws-documentation-mcp-server@latest"]
+                args=["awslabs.aws-documentation-mcp-server@latest"],
+                enabled=True,
+                description="AWS documentation and service information"
             ),
             "aws_diagram": MCPServerConfig(
                 command="uvx", 
-                args=["awslabs.aws-diagram-mcp-server@latest"]
-            ),
-            "github": MCPServerConfig(
-                command="npx",
-                args=["@modelcontextprotocol/server-github"],
-                env={}  # Will be populated with token if available
-            ),
-            "cdk": MCPServerConfig(
-                command="uvx",
-                args=["awslabs.cdk-mcp-server@latest"]
-            ),
-            "terraform": MCPServerConfig(
-                command="uvx",
-                args=["awslabs.terraform-mcp-server"]
-            ),
-            "cost_explorer": MCPServerConfig(
-                command="uvx",
-                args=["awslabs.cost-explorer-mcp-server"]
-            ),
-            "cloudwatch": MCPServerConfig(
-                command="uvx",
-                args=["awslabs.cloudwatch-logs-mcp-server"]
+                args=["awslabs.aws-diagram-mcp-server@latest"],
+                enabled=True,
+                description="Generate AWS architecture diagrams"
             )
         })
 
@@ -231,19 +320,19 @@ class Config:
         )
         
         # MCP configuration
-        mcp = MCPConfig.default()
-        # Create new MCP config with GitHub token if available
-        if github.is_available:
-            # Create a new github server config with the token
-            github_server = MCPServerConfig(
-                command="npx",
-                args=["@modelcontextprotocol/server-github"],
-                env={"GITHUB_PERSONAL_ACCESS_TOKEN": github.personal_access_token}
-            )
-            # Create new servers dict with the updated github config
-            servers = dict(mcp.servers)
-            servers["github"] = github_server
-            mcp = MCPConfig(servers=servers)
+        mcp = MCPConfig.from_yaml()
+        
+        # Update GitHub environment if token is available
+        if github.is_available and 'github' in mcp.servers:
+            github_server = mcp.servers['github']
+            if github_server.env is None:
+                # Create new server config with environment
+                from dataclasses import replace
+                github_server_with_env = replace(
+                    github_server,
+                    env={"GITHUB_PERSONAL_ACCESS_TOKEN": github.personal_access_token}
+                )
+                mcp = MCPConfig(servers={**mcp.servers, 'github': github_server_with_env})
         
         # API configuration
         api = APIConfig(
@@ -274,9 +363,6 @@ class Config:
     
     def print_status(self) -> None:
         """Print configuration status for debugging"""
-        from infrastructure.logging import get_logger
-        logger = get_logger(__name__)
-        
         logger.info(f"environment=<{self.environment}> | debug_mode=<{self.debug}> | configuration status")
         logger.info(f"model_provider=<{self.model.provider}> | model_id=<{self.model.model_id}>")
         
