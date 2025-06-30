@@ -11,9 +11,6 @@
           <span class="text-sm font-medium" :class="statusTextClass">
             {{ statusText }}
           </span>
-          <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-            {{ task.task_type }}
-          </span>
         </div>
         
         <h3 class="text-lg font-medium text-gray-900 mb-2">
