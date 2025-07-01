@@ -376,6 +376,7 @@ docker_mcp:
 | `ANTHROPIC_API_KEY` | If using Anthropic | - | Anthropic API key |
 | `OPENAI_API_KEY` | If using OpenAI | - | OpenAI API key |
 | `MODEL_ID` | No | Auto-detected | Specific model ID |
+| `MAX_TOKENS` | No | `1000` | Maximum tokens for AI responses (increase for longer responses) |
 | `AWS_DEFAULT_REGION` | No | `us-east-1` | Default AWS region |
 | `AWS_PROFILE` | No | `default` | AWS profile to use |
 | `GITHUB_PERSONAL_ACCESS_TOKEN` | No | - | GitHub API token (required for GitHub MCP server) |
