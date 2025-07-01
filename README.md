@@ -7,7 +7,7 @@
 ```bash
 touch .env # Copy format from quickstart.env
 
-docker compose --build --no-cache
+docker compose build --no-cache
 docker compose up
 ```
 
