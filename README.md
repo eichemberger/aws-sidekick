@@ -2,6 +2,56 @@
 
 **AWS Sidekick** is an intelligent cloud engineering assistant that helps you analyze, optimize, and secure your AWS infrastructure. Built with a modern hexagonal architecture, it combines the power of AI agents with specialized AWS tools to provide comprehensive cloud management support.
 
+## Quick Start
+
+```bash
+touch .env # Copy format from quickstart.env
+
+docker compose --build --no-cache
+docker compose up
+```
+
+Wait a few seconds and open http://localhost:8000. Configure the AWS credentials in the UI and start chatting.
+
+## 💬 Writing Effective Prompts
+
+To get the best results from AWS Sidekick, follow these guidelines for crafting your prompts:
+
+### ✅ Good Prompts
+
+**Read-only Questions** - Be as ambiguous as you want:
+- "What's the status of my infrastructure?"
+- "Show me my EC2 costs this month"
+- "Are there any security issues I should know about?"
+- "Help me understand my VPC configuration"
+
+**Write Operations** - Give concise and clear instructions:
+- "Create a new S3 bucket named 'my-app-logs' with versioning enabled in us-west-2"
+- "Add a security group rule to allow HTTPS traffic from 0.0.0.0/0 to my web servers"
+- "Scale my Auto Scaling group 'web-tier' to 3 instances"
+- "Update the RDS instance 'prod-db' to enable automated backups with 7-day retention"
+
+### ❌ Bad Prompts
+
+**Ambiguous Write Operations** - Avoid vague requests that require guesswork:
+- ❌ "My EC2 instance cannot connect to RDS, fix it"
+- ❌ "Make my app faster"
+- ❌ "Something is wrong with my load balancer"
+- ❌ "Optimize my costs"
+
+**Better alternatives:**
+- ✅ "Check connectivity between EC2 instance i-1234567890abcdef0 and RDS instance prod-db"
+- ✅ "Analyze the performance of my application load balancer and suggest specific optimizations"
+- ✅ "Review my EC2 instance types and recommend right-sizing opportunities to reduce costs"
+
+### 💡 Pro Tips
+
+- **Be specific** about resource names, regions, and desired outcomes for write operations
+- **Ask follow-up questions** to clarify requirements before making changes
+- **Use read-only analysis first** to understand the current state before requesting modifications
+- **Request confirmation** for destructive operations by asking "show me what will change first"
+
+
 ## 🚀 Features
 
 - **AI-Powered Analysis**: Uses Anthropic Claude or OpenAI GPT models for intelligent AWS infrastructure analysis
