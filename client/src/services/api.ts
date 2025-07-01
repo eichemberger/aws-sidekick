@@ -10,6 +10,10 @@ import type {
   AWSCredentialsRequest,
   AWSCredentialsResponse,
   AWSCredentialsValidation,
+  AWSAccount,
+  AWSAccountRequest,
+  AWSAccountUpdateRequest,
+  SetActiveAccountRequest,
   HealthCheck
 } from '@/types/api'
 
@@ -190,6 +194,72 @@ class ApiService {
 
   async clearAwsCredentials(): Promise<void> {
     await this.client.delete('/aws/credentials')
+  }
+
+  // Multi-Account AWS Management endpoints
+  async registerAwsAccount(request: AWSAccountRequest): Promise<AWSAccount> {
+    const response = await this.client.post<AWSAccount>('/aws/accounts', request)
+    return response.data
+  }
+
+  async getAwsAccounts(): Promise<AWSAccount[]> {
+    const response = await this.client.get<AWSAccount[]>('/aws/accounts')
+    return response.data
+  }
+
+  async getAwsAccount(alias: string): Promise<AWSAccount> {
+    const response = await this.client.get<AWSAccount>(`/aws/accounts/${alias}`)
+    return response.data
+  }
+
+  async updateAwsAccountCredentials(alias: string, request: AWSAccountUpdateRequest): Promise<AWSAccount> {
+    const response = await this.client.put<AWSAccount>(`/aws/accounts/${alias}/credentials`, request)
+    return response.data
+  }
+
+  async deleteAwsAccount(alias: string): Promise<void> {
+    await this.client.delete(`/aws/accounts/${alias}`)
+  }
+
+  async getDefaultAwsAccount(): Promise<AWSAccount | null> {
+    try {
+      const response = await this.client.get<AWSAccount>('/aws/accounts/default')
+      return response.data
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return null
+      }
+      throw error
+    }
+  }
+
+  async setDefaultAwsAccount(alias: string): Promise<void> {
+    await this.client.post(`/aws/accounts/${alias}/default`)
+  }
+
+  async setActiveAwsAccount(request: SetActiveAccountRequest): Promise<void> {
+    await this.client.post('/aws/active-account', request)
+  }
+
+  async clearActiveAwsAccount(): Promise<void> {
+    await this.client.delete('/aws/active-account')
+  }
+
+  async getActiveAccountAlias(): Promise<string | null> {
+    try {
+      const response = await this.client.get<{ account_alias: string | null }>('/aws/active-account')
+      return response.data.account_alias
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return null
+      }
+      throw error
+    }
+  }
+
+  async validateAwsAccountCredentials(alias: string): Promise<boolean> {
+    const response = await this.client.post<{ valid: boolean }>(`/aws/accounts/${alias}/validate`)
+    return response.data.valid
   }
 }
 

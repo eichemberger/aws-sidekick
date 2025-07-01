@@ -75,19 +75,25 @@ class MCPServerManager:
                 try:
                     logger.debug(f"tool_name=<{server_name}> | registering MCP client | description=<{server_config.description or 'N/A'}>")
                     
-                    # Prepare environment for the server
-                    server_env = server_config.env.copy() if server_config.env else {}
+                    # Prepare environment for the server - inherit current process environment
+                    # and overlay any server-specific environment variables
+                    server_env = os.environ.copy()  # Start with current process environment
+                    if server_config.env:
+                        server_env.update(server_config.env)  # Add server-specific vars
                     
                     # For GitHub server, ensure token is set
                     if server_name == "github" and not config.github.is_available:
                         logger.warning(f"tool_name=<{server_name}> | skipping | github_token not available")
                         continue
                     
+                    # Debug: Log AWS environment being passed to this MCP server
+                    logger.debug(f"tool_name=<{server_name}> | aws_access_key={'***' if server_env.get('AWS_ACCESS_KEY_ID') else 'NOT_SET'} | aws_profile={server_env.get('AWS_PROFILE', 'NOT_SET')} | aws_region={server_env.get('AWS_DEFAULT_REGION', 'NOT_SET')}")
+                    
                     mcp_client = MCPClient(lambda sc=server_config, se=server_env: stdio_client(
                         StdioServerParameters(
                             command=sc.command,
                             args=sc.args,
-                            env=se if se else None
+                            env=se
                         )
                     ))
                     mcp_client.start()
@@ -199,9 +205,21 @@ class MCPServerManager:
             'has_secret_key': bool(os.environ.get('AWS_SECRET_ACCESS_KEY')),
             'has_session_token': bool(os.environ.get('AWS_SESSION_TOKEN'))
         }
-        logger.debug(f"aws_environment=<{aws_env_vars}> | reinitializing with updated credentials")
+        logger.info(f"aws_environment=<{aws_env_vars}> | reinitializing with updated credentials")
         
-        return self.initialize_mcp_servers_and_agent()
+        # Clean up existing clients first
+        logger.info("cleaning up existing MCP clients before reinitialization")
+        self._cleanup_existing_clients()
+        
+        # Reinitialize everything
+        result = self.initialize_mcp_servers_and_agent()
+        
+        if result[0] is not None:
+            logger.info("MCP servers and agent reinitialized successfully with new credentials")
+        else:
+            logger.error("Failed to reinitialize MCP servers and agent")
+            
+        return result
 
     def _cleanup_existing_clients(self):
         """Clean up existing MCP clients"""

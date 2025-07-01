@@ -85,6 +85,7 @@ class SQLiteChatRepositoryAdapter(ChatRepositoryPort):
                 CREATE TABLE IF NOT EXISTS conversations (
                     id TEXT PRIMARY KEY,
                     title TEXT NOT NULL,
+                    account_id TEXT NOT NULL,
                     created_at TIMESTAMP NOT NULL,
                     updated_at TIMESTAMP NOT NULL
                 )
@@ -119,9 +120,9 @@ class SQLiteChatRepositoryAdapter(ChatRepositoryPort):
         
         async with self._get_db_connection() as db:
             await db.execute("""
-                INSERT INTO conversations (id, title, created_at, updated_at)
-                VALUES (?, ?, ?, ?)
-            """, (conversation.id, conversation.title, conversation.created_at, conversation.updated_at))
+                INSERT INTO conversations (id, title, account_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (conversation.id, conversation.title, conversation.account_id, conversation.created_at, conversation.updated_at))
             await db.commit()
         
         log_operation(
@@ -140,7 +141,7 @@ class SQLiteChatRepositoryAdapter(ChatRepositoryPort):
         
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute("""
-                SELECT id, title, created_at, updated_at
+                SELECT id, title, account_id, created_at, updated_at
                 FROM conversations 
                 WHERE id = ?
             """, (conversation_id,)) as cursor:
@@ -150,8 +151,9 @@ class SQLiteChatRepositoryAdapter(ChatRepositoryPort):
                     return Conversation(
                         id=row[0],
                         title=row[1],
-                        created_at=datetime.fromisoformat(row[2]),
-                        updated_at=datetime.fromisoformat(row[3])
+                        account_id=row[2],
+                        created_at=datetime.fromisoformat(row[3]),
+                        updated_at=datetime.fromisoformat(row[4])
                     )
                 return None
     
@@ -161,7 +163,7 @@ class SQLiteChatRepositoryAdapter(ChatRepositoryPort):
         
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute("""
-                SELECT id, title, created_at, updated_at
+                SELECT id, title, account_id, created_at, updated_at
                 FROM conversations 
                 ORDER BY updated_at DESC
                 LIMIT ? OFFSET ?
@@ -172,8 +174,9 @@ class SQLiteChatRepositoryAdapter(ChatRepositoryPort):
                     Conversation(
                         id=row[0],
                         title=row[1],
-                        created_at=datetime.fromisoformat(row[2]),
-                        updated_at=datetime.fromisoformat(row[3])
+                        account_id=row[2],
+                        created_at=datetime.fromisoformat(row[3]),
+                        updated_at=datetime.fromisoformat(row[4])
                     )
                     for row in rows
                 ]
@@ -185,9 +188,9 @@ class SQLiteChatRepositoryAdapter(ChatRepositoryPort):
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("""
                 UPDATE conversations 
-                SET title = ?, updated_at = ?
+                SET title = ?, account_id = ?, updated_at = ?
                 WHERE id = ?
-            """, (conversation.title, conversation.updated_at, conversation.id))
+            """, (conversation.title, conversation.account_id, conversation.updated_at, conversation.id))
             await db.commit()
         
         log_operation(
@@ -234,9 +237,9 @@ class SQLiteChatRepositoryAdapter(ChatRepositoryPort):
             
             # Create conversation
             await db.execute("""
-                INSERT INTO conversations (id, title, created_at, updated_at)
-                VALUES (?, ?, ?, ?)
-            """, (conversation.id, conversation.title, conversation.created_at, conversation.updated_at))
+                INSERT INTO conversations (id, title, account_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (conversation.id, conversation.title, conversation.account_id, conversation.created_at, conversation.updated_at))
             
             # Add first message
             await db.execute("""

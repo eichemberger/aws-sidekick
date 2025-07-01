@@ -11,14 +11,12 @@ class TaskStatus(Enum):
     FAILED = "failed"
 
 
-# Removed TaskType enum - simplified task system
-
-
 @dataclass
 class Task:
     """Domain entity representing a cloud engineering task"""
     id: str
     description: str
+    account_alias: str
     status: TaskStatus = TaskStatus.PENDING
     created_at: datetime = None
     completed_at: Optional[datetime] = None

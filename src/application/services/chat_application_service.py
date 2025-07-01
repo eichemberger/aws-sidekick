@@ -3,6 +3,8 @@ from datetime import datetime
 from typing import List, Optional
 from src.core.ports.inbound.chat_service_port import ChatServicePort
 from src.core.ports.outbound.chat_repository_port import ChatRepositoryPort
+from src.core.ports.inbound.aws_service_port import AWSServicePort
+from src.core.ports.inbound.aws_account_service_port import AWSAccountServicePort
 from src.core.domain.entities.chat import ChatMessage, Conversation
 from src.infrastructure.logging import get_logger, log_operation
 
@@ -11,15 +13,44 @@ logger = get_logger(__name__)
 class ChatApplicationService(ChatServicePort):
     """Application service for chat operations."""
     
-    def __init__(self, chat_repository: ChatRepositoryPort):
+    def __init__(self, chat_repository: ChatRepositoryPort, aws_service: Optional[AWSServicePort] = None, aws_account_service: Optional[AWSAccountServicePort] = None):
         self.chat_repository = chat_repository
+        self.aws_service = aws_service
+        self.aws_account_service = aws_account_service
     
-    async def create_conversation(self, title: str) -> Conversation:
+    async def create_conversation(self, title: str, account_alias: Optional[str] = None) -> Conversation:
         """Create a new conversation with auto-generated ID."""
         now = datetime.now()
+        
+        # Get account alias from AWS service if not provided
+        if not account_alias and self.aws_service:
+            try:
+                account_alias = await self.aws_service.get_active_account_alias()
+            except Exception:
+                pass  # Continue without account alias if service unavailable
+        
+        # Use default if still no account alias
+        if not account_alias:
+            account_alias = "default"
+        
+        # Resolve account alias to account ID
+        account_id = account_alias  # Default fallback
+        if self.aws_account_service and account_alias != "default":
+            try:
+                account = await self.aws_account_service.get_account(account_alias)
+                if account and account.account_id:
+                    account_id = account.account_id
+                else:
+                    # If account not found or no account_id, use alias as fallback
+                    account_id = account_alias
+            except Exception:
+                # If error resolving account, use alias as fallback
+                account_id = account_alias
+        
         conversation = Conversation(
             id=str(uuid.uuid4()),
             title=title,
+            account_id=account_id,
             created_at=now,
             updated_at=now
         )
@@ -155,12 +186,15 @@ class ChatApplicationService(ChatServicePort):
             
         return title
     
-    async def create_conversation_from_message(self, first_message: str) -> Conversation:
+    async def create_conversation_from_message(self, first_message: str, account_alias: Optional[str] = None) -> Conversation:
         """Create a new conversation with a title generated from the first message."""
         title = self._generate_conversation_title(first_message)
-        return await self.create_conversation(title)
+        logger.info(f"Creating conversation from message with account_alias: {account_alias}")
+        conversation = await self.create_conversation(title, account_alias)
+        logger.info(f"Created conversation {conversation.id} with account_id: {conversation.account_id}")
+        return conversation
     
-    async def create_conversation_with_first_message(self, user_message: str, title: str = None) -> tuple[Conversation, ChatMessage]:
+    async def create_conversation_with_first_message(self, user_message: str, title: str = None, account_alias: Optional[str] = None) -> tuple[Conversation, ChatMessage]:
         """Atomically create a conversation with the first user message.
         
         This ensures that conversation creation and first message addition
@@ -172,10 +206,36 @@ class ChatApplicationService(ChatServicePort):
         if not title:
             title = self._generate_conversation_title(user_message)
         
+        # Get account alias from AWS service if not provided
+        if not account_alias and self.aws_service:
+            try:
+                account_alias = await self.aws_service.get_active_account_alias()
+            except Exception:
+                pass  # Continue without account alias if service unavailable
+        
+        # Use default if still no account alias
+        if not account_alias:
+            account_alias = "default"
+        
+        # Resolve account alias to account ID
+        account_id = account_alias  # Default fallback
+        if self.aws_account_service and account_alias != "default":
+            try:
+                account = await self.aws_account_service.get_account(account_alias)
+                if account and account.account_id:
+                    account_id = account.account_id
+                else:
+                    # If account not found or no account_id, use alias as fallback
+                    account_id = account_alias
+            except Exception:
+                # If error resolving account, use alias as fallback
+                account_id = account_alias
+        
         # Create entities
         conversation = Conversation(
             id=str(uuid.uuid4()),
             title=title,
+            account_id=account_id,
             created_at=now,
             updated_at=now
         )

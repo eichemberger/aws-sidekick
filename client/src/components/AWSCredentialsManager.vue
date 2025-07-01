@@ -3,8 +3,12 @@
     <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
       <div class="flex items-center justify-between">
         <div>
-          <h3 class="text-lg font-medium text-primary">AWS Credentials</h3>
-          <p class="text-sm text-secondary">Configure AWS credentials for your session</p>
+          <h3 class="text-lg font-medium text-primary">
+            {{ isRegistration ? 'Register AWS Account' : 'AWS Credentials' }}
+          </h3>
+          <p class="text-sm text-secondary">
+            {{ isRegistration ? 'Add new AWS account to your registry' : 'Configure AWS credentials for your session' }}
+          </p>
         </div>
         <div class="flex items-center space-x-2">
           <div v-if="awsStore.hasValidCredentials" class="flex items-center text-green-600 dark:text-green-400">
@@ -25,7 +29,7 @@
 
     <div class="p-6">
       <!-- Current Account Info -->
-      <div v-if="awsStore.accountInfo" class="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+      <div v-if="!isRegistration && awsStore.accountInfo" class="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
         <h4 class="text-sm font-medium text-green-800 dark:text-green-300 mb-2">Current AWS Account</h4>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
           <div>
@@ -92,6 +96,10 @@
               required
               placeholder="Your AWS Access Key ID"
               class="input-field"
+              :class="{ 
+                'border-red-300 dark:border-red-600 focus:border-red-500 focus:ring-red-500': 
+                  showValidationErrors && !form.access_key_id?.trim() 
+              }"
             />
           </div>
           
@@ -106,6 +114,10 @@
               required
               placeholder="Your AWS Secret Access Key"
               class="input-field"
+              :class="{ 
+                'border-red-300 dark:border-red-600 focus:border-red-500 focus:ring-red-500': 
+                  showValidationErrors && !form.secret_access_key?.trim() 
+              }"
             />
           </div>
           
@@ -136,6 +148,10 @@
               required
               placeholder="default"
               class="input-field"
+              :class="{ 
+                'border-red-300 dark:border-red-600 focus:border-red-500 focus:ring-red-500': 
+                  showValidationErrors && !form.profile?.trim() 
+              }"
             />
             <p class="text-xs text-muted mt-1">
               Profile name from ~/.aws/credentials or ~/.aws/config
@@ -157,6 +173,10 @@
               required
               placeholder="Paste the export commands from AWS SSO:&#10;export AWS_ACCESS_KEY_ID=&quot;...&quot;&#10;export AWS_SECRET_ACCESS_KEY=&quot;...&quot;&#10;export AWS_SESSION_TOKEN=&quot;...&quot;"
               class="input-field font-mono text-sm"
+              :class="{ 
+                'border-red-300 dark:border-red-600 focus:border-red-500 focus:ring-red-500': 
+                  showValidationErrors && (!ssoExportText?.trim() || !parsedSsoCredentials.access_key_id || !parsedSsoCredentials.secret_access_key)
+              }"
             />
             <p class="text-xs text-muted mt-1">
               Copy and paste the export commands directly from AWS SSO or CLI
@@ -193,31 +213,88 @@
           </div>
         </div>
 
-        <!-- Region -->
+        <!-- Region (always us-east-1) -->
         <div>
           <label for="region" class="block text-sm font-medium text-primary mb-1">
             AWS Region *
           </label>
-          <select
+          <input
             id="region"
             v-model="form.region"
-            required
-            class="input-field"
-          >
-            <option value="us-east-1">US East (N. Virginia)</option>
-            <option value="us-east-2">US East (Ohio)</option>
-            <option value="us-west-1">US West (N. California)</option>
-            <option value="us-west-2">US West (Oregon)</option>
-            <option value="eu-west-1">Europe (Ireland)</option>
-            <option value="eu-west-2">Europe (London)</option>
-            <option value="eu-west-3">Europe (Paris)</option>
-            <option value="eu-central-1">Europe (Frankfurt)</option>
-            <option value="ap-southeast-1">Asia Pacific (Singapore)</option>
-            <option value="ap-southeast-2">Asia Pacific (Sydney)</option>
-            <option value="ap-northeast-1">Asia Pacific (Tokyo)</option>
-            <option value="ap-south-1">Asia Pacific (Mumbai)</option>
-            <option value="sa-east-1">South America (São Paulo)</option>
-          </select>
+            type="text"
+            readonly
+            class="input-field bg-gray-100 dark:bg-gray-800"
+          />
+          <p class="text-xs text-muted mt-1">
+            All accounts use us-east-1 region
+          </p>
+        </div>
+
+        <!-- Registration-specific fields -->
+        <div v-if="isRegistration" class="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <h4 class="text-sm font-medium text-primary">Account Details</h4>
+          
+          <div>
+            <label for="alias" class="block text-sm font-medium text-primary mb-1">
+              Account Alias *
+            </label>
+            <input
+              id="alias"
+              v-model="registrationForm.alias"
+              type="text"
+              required
+              placeholder="e.g., production, development, staging"
+              class="input-field"
+              :class="{ 
+                'border-red-300 dark:border-red-600 focus:border-red-500 focus:ring-red-500': 
+                  showValidationErrors && !registrationForm.alias?.trim() 
+              }"
+            />
+            <p class="text-xs text-muted mt-1">
+              Unique identifier for this AWS account
+            </p>
+          </div>
+          
+          <div>
+            <label for="description" class="block text-sm font-medium text-primary mb-1">
+              Description (Optional)
+            </label>
+            <input
+              id="description"
+              v-model="registrationForm.description"
+              type="text"
+              placeholder="e.g., Production environment for web apps"
+              class="input-field"
+            />
+          </div>
+          
+          <div class="flex items-center">
+            <input
+              id="setAsDefault"
+              v-model="registrationForm.setAsDefault"
+              type="checkbox"
+              class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded"
+            />
+            <label for="setAsDefault" class="ml-2 text-sm text-secondary">
+              Set as default account
+            </label>
+          </div>
+        </div>
+
+        <!-- Validation Errors Display -->
+        <div v-if="showValidationErrors && validationMessages.length > 0" class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+          <div class="flex">
+            <XCircleIcon class="h-5 w-5 text-red-600 dark:text-red-300 flex-shrink-0" />
+            <div class="ml-2">
+              <p class="text-sm font-medium text-red-800 dark:text-red-300 mb-2">Please fix the following issues:</p>
+              <ul class="text-sm text-red-700 dark:text-red-200 space-y-1">
+                <li v-for="message in validationMessages" :key="message" class="flex items-start">
+                  <span class="mr-2">•</span>
+                  <span>{{ message }}</span>
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
 
         <!-- Error Display -->
@@ -247,33 +324,71 @@
 
         <!-- Action Buttons -->
         <div class="flex space-x-3 pt-4">
-          <button
-            type="button"
-            @click="validateOnly"
-            :disabled="isLoading || !isFormValid"
-            class="btn-secondary flex-1"
-          >
-            <span v-if="isValidating" class="flex items-center justify-center">
-              <ArrowPathIcon class="h-4 w-4 animate-spin mr-2" />
-              Validating...
-            </span>
-            <span v-else>Validate Only</span>
-          </button>
-          <button
-            type="submit"
-            :disabled="isLoading || !isFormValid"
-            class="btn-primary flex-1"
-          >
-            <span v-if="isLoading && !isValidating" class="flex items-center justify-center">
-              <ArrowPathIcon class="h-4 w-4 animate-spin mr-2" />
-              Setting...
-            </span>
-            <span v-else>Set Credentials</span>
-          </button>
+          <!-- Registration Mode Buttons -->
+          <template v-if="isRegistration">
+            <button
+              type="button"
+              @click="emit('cancel')"
+              :disabled="isLoading"
+              class="btn-secondary flex-1"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              @click="validateOnly"
+              :disabled="isLoading || isValidating"
+              class="btn-secondary flex-1"
+            >
+              <span v-if="isValidating" class="flex items-center justify-center">
+                <ArrowPathIcon class="h-4 w-4 animate-spin mr-2" />
+                Validating...
+              </span>
+              <span v-else>Validate</span>
+            </button>
+            <button
+              type="submit"
+              :disabled="isLoading || isValidating"
+              class="btn-primary flex-1"
+            >
+              <span v-if="isLoading && !isValidating" class="flex items-center justify-center">
+                <ArrowPathIcon class="h-4 w-4 animate-spin mr-2" />
+                Registering...
+              </span>
+              <span v-else>Register Account</span>
+            </button>
+          </template>
+          
+          <!-- Normal Mode Buttons -->
+          <template v-else>
+            <button
+              type="button"
+              @click="validateOnly"
+              :disabled="isLoading || isValidating"
+              class="btn-secondary flex-1"
+            >
+              <span v-if="isValidating" class="flex items-center justify-center">
+                <ArrowPathIcon class="h-4 w-4 animate-spin mr-2" />
+                Validating...
+              </span>
+              <span v-else>Validate Only</span>
+            </button>
+            <button
+              type="submit"
+              :disabled="isLoading || isValidating"
+              class="btn-primary flex-1"
+            >
+              <span v-if="isLoading && !isValidating" class="flex items-center justify-center">
+                <ArrowPathIcon class="h-4 w-4 animate-spin mr-2" />
+                Setting...
+              </span>
+              <span v-else>Set Credentials</span>
+            </button>
+          </template>
         </div>
 
         <!-- Clear Credentials Button -->
-        <div v-if="awsStore.hasValidCredentials" class="pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div v-if="!isRegistration && awsStore.hasValidCredentials" class="pt-4 border-t border-gray-200 dark:border-gray-700">
           <button
             type="button"
             @click="clearCredentials"
@@ -303,6 +418,22 @@ import {
 import { useAwsStore } from '@/stores/aws'
 import type { AWSCredentialsRequest, AWSCredentialsValidation } from '@/types/api'
 
+// Props
+const props = defineProps<{
+  isRegistration?: boolean
+}>()
+
+// Emits
+const emit = defineEmits<{
+  'credentials-set': [{ 
+    credentials: AWSCredentialsRequest,
+    alias?: string,
+    description?: string,
+    setAsDefault?: boolean
+  }]
+  'cancel': []
+}>()
+
 const awsStore = useAwsStore()
 
 // Form state
@@ -313,6 +444,13 @@ const form = ref<AWSCredentialsRequest>({
   session_token: '',
   region: 'us-east-1',
   profile: ''
+})
+
+// Registration-specific form fields
+const registrationForm = ref({
+  alias: '',
+  description: '',
+  setAsDefault: false
 })
 
 // SSO Export state
@@ -331,16 +469,53 @@ const error = ref<string | null>(null)
 const validationResult = ref<AWSCredentialsValidation | null>(null)
 
 // Computed
-const isFormValid = computed(() => {
+const validationMessages = computed(() => {
+  const messages: string[] = []
+  
+  // Check credentials based on type
   if (credentialType.value === 'keys') {
-    return !!(form.value.access_key_id && form.value.secret_access_key && form.value.region)
+    if (!form.value.access_key_id?.trim()) {
+      messages.push('Access Key ID is required')
+    }
+    if (!form.value.secret_access_key?.trim()) {
+      messages.push('Secret Access Key is required')
+    }
   } else if (credentialType.value === 'profile') {
-    return !!(form.value.profile && form.value.region)
+    if (!form.value.profile?.trim()) {
+      messages.push('AWS Profile name is required')
+    }
   } else if (credentialType.value === 'sso-export') {
-    return !!(parsedSsoCredentials.value.access_key_id && parsedSsoCredentials.value.secret_access_key && form.value.region)
+    if (!ssoExportText.value?.trim()) {
+      messages.push('Please paste AWS SSO export commands')
+    } else if (!parsedSsoCredentials.value.access_key_id) {
+      messages.push('Could not find AWS_ACCESS_KEY_ID in export commands')
+    } else if (!parsedSsoCredentials.value.secret_access_key) {
+      messages.push('Could not find AWS_SECRET_ACCESS_KEY in export commands')
+    }
   }
-  return false
+  
+  // Check region (should always be set to us-east-1)
+  if (!form.value.region?.trim()) {
+    messages.push('AWS Region is required')
+  }
+  
+  // For registration mode, check account details
+  if (props.isRegistration) {
+    if (!registrationForm.value.alias?.trim()) {
+      messages.push('Account alias is required')
+    } else if (!/^[a-zA-Z0-9-_]+$/.test(registrationForm.value.alias.trim())) {
+      messages.push('Account alias can only contain letters, numbers, hyphens, and underscores')
+    }
+  }
+  
+  return messages
 })
+
+const isFormValid = computed(() => {
+  return validationMessages.value.length === 0
+})
+
+const showValidationErrors = ref(false)
 
 // Watch credential type changes to clear form
 watch(credentialType, (newType) => {
@@ -364,12 +539,25 @@ watch(credentialType, (newType) => {
   }
   error.value = null
   validationResult.value = null
+  showValidationErrors.value = false
 })
+
+// Hide validation errors when form becomes valid or when user starts typing
+watch([form, registrationForm, ssoExportText], () => {
+  if (showValidationErrors.value && isFormValid.value) {
+    showValidationErrors.value = false
+  }
+}, { deep: true })
 
 // Methods
 const validateOnly = async () => {
-  if (!isFormValid.value) return
+  // Show validation errors if form is invalid
+  if (!isFormValid.value) {
+    showValidationErrors.value = true
+    return
+  }
 
+  showValidationErrors.value = false
   isValidating.value = true
   error.value = null
   validationResult.value = null
@@ -390,18 +578,35 @@ const validateOnly = async () => {
 }
 
 const handleSubmit = async () => {
-  if (!isFormValid.value) return
+  // Show validation errors if form is invalid
+  if (!isFormValid.value) {
+    showValidationErrors.value = true
+    return
+  }
 
+  showValidationErrors.value = false
   isLoading.value = true
   error.value = null
   validationResult.value = null
 
   try {
     const credentials = createCredentialsObject()
-    await awsStore.setCredentials(credentials)
     
-    // Show success message
-    validationResult.value = { valid: true }
+    if (props.isRegistration) {
+      // Emit for registration
+      emit('credentials-set', {
+        credentials,
+        alias: registrationForm.value.alias.trim(),
+        description: registrationForm.value.description.trim() || undefined,
+        setAsDefault: registrationForm.value.setAsDefault
+      })
+    } else {
+      // Normal credentials setting
+      await awsStore.setCredentials(credentials)
+      
+      // Show success message
+      validationResult.value = { valid: true }
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to set credentials'
   } finally {

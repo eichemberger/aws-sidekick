@@ -71,28 +71,19 @@
             </div>
           </div>
         </div>
-        
-        <!-- Typing Indicator -->
-        <TypingIndicator v-if="isLoading" :loading-message="loadingMessage" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
 import type { ChatMessage } from '@/types/api'
 
-// Lazy load typing indicator
-const TypingIndicator = defineAsyncComponent(() => import('./TypingIndicator.vue'))
-
 interface Props {
   messages: ChatMessage[]
-  isLoading: boolean
-  loadingMessage: string
   examplePrompts: string[]
 }
 

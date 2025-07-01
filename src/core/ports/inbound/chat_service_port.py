@@ -6,7 +6,7 @@ class ChatServicePort(ABC):
     """Port for chat service operations."""
     
     @abstractmethod
-    async def create_conversation(self, title: str) -> Conversation:
+    async def create_conversation(self, title: str, account_alias: Optional[str] = None) -> Conversation:
         """Create a new conversation with auto-generated ID."""
         pass
     
@@ -46,11 +46,11 @@ class ChatServicePort(ABC):
         pass
     
     @abstractmethod
-    async def create_conversation_from_message(self, first_message: str) -> Conversation:
+    async def create_conversation_from_message(self, first_message: str, account_alias: Optional[str] = None) -> Conversation:
         """Create a new conversation with a title generated from the first message."""
         pass
     
     @abstractmethod
-    async def create_conversation_with_first_message(self, user_message: str, title: str = None) -> tuple[Conversation, ChatMessage]:
+    async def create_conversation_with_first_message(self, user_message: str, title: str = None, account_alias: Optional[str] = None) -> tuple[Conversation, ChatMessage]:
         """Atomically create a conversation with the first user message."""
         pass 

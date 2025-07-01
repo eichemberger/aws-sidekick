@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ChatMessage, Conversation } from '@/types/api'
 import { apiService } from '@/services/api'
+import { useAwsAccountsStore } from '@/stores/awsAccounts'
 
 // Import router to handle navigation
 import router from '@/router'
@@ -106,12 +107,17 @@ export const useChatStore = defineStore('chat', () => {
     error.value = null
 
     try {
+      // Get the active AWS account
+      const awsAccountsStore = useAwsAccountsStore()
+      const activeAccountAlias = awsAccountsStore.activeAccount?.alias
+      
       // If no current conversation exists (new user), let backend create one
       const conversationId = currentConversation.value?.id
       
       const response = await apiService.sendChatMessage({
         message: content.trim(),
-        conversation_id: conversationId
+        conversation_id: conversationId,
+        account_alias: activeAccountAlias
       })
 
       // Update current conversation if it changed or was created

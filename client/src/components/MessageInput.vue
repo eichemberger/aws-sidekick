@@ -8,29 +8,34 @@
           <span v-else-if="conversationCount > 0" class="font-medium">{{ conversationCount }} conversation(s)</span>
           <span v-else class="font-medium">Ready to chat</span>
         </div>
+        <AWSAccountSelector />
       </div>
 
-      <div class="relative">
+      <div class="relative">        
         <textarea
           ref="messageInput"
           v-model="inputMessage"
           @keydown="handleKeydown"
           @input="adjustTextareaHeight"
-          placeholder="Ask me anything about your AWS infrastructure..."
+          :placeholder="disabled ? 'Processing...' : !canSendMessage ? 'Please select an AWS account to start chatting...' : 'Ask me anything about your AWS infrastructure...'"
           class="w-full bg-gray-50/50 dark:bg-gray-800/50 border border-gray-300/50 dark:border-gray-600/50 rounded-2xl px-6 py-4 pr-14 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-200"
+          :class="{ 
+            'opacity-60 cursor-not-allowed': disabled || !canSendMessage
+          }"
           rows="1"
-          :disabled="isLoading"
+          :disabled="disabled || !canSendMessage"
         ></textarea>
         
         <!-- Send Button -->
         <button
           @click="sendMessage"
-          :disabled="!inputMessage.trim() || isLoading"
+          :disabled="!inputMessage.trim() || disabled || !canSendMessage"
           class="absolute right-3 bottom-3 p-2.5 rounded-xl transition-all duration-200 shadow-lg"
-          :class="inputMessage.trim() && !isLoading 
+          :class="inputMessage.trim() && !disabled && canSendMessage
             ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-blue-500/25' 
             : 'text-gray-400 dark:text-gray-500 cursor-not-allowed bg-gray-200 dark:bg-gray-700/50'"
         >
+          <!-- Send Icon -->
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
           </svg>
@@ -51,14 +56,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import type { Conversation } from '@/types/api'
+import AWSAccountSelector from './AWSAccountSelector.vue'
+import { useAwsAccountsStore } from '@/stores/awsAccounts'
 
 interface Props {
   isLoading: boolean
   isInitialized: boolean
   currentConversation: Conversation | null
   conversationCount: number
+  disabled?: boolean
 }
 
 interface Emits {
@@ -69,8 +78,15 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
+// AWS Account Store
+const awsAccountsStore = useAwsAccountsStore()
+const { activeAccount } = storeToRefs(awsAccountsStore)
+
 const messageInput = ref<HTMLTextAreaElement>()
 const inputMessage = ref('')
+
+// Check if user can send messages (has selected an account)
+const canSendMessage = computed(() => Boolean(activeAccount.value))
 
 const adjustTextareaHeight = () => {
   if (messageInput.value) {
@@ -87,7 +103,7 @@ const handleKeydown = (event: KeyboardEvent) => {
 }
 
 const sendMessage = () => {
-  if (!inputMessage.value.trim() || props.isLoading) return
+  if (!inputMessage.value.trim() || props.disabled || !canSendMessage.value) return
 
   const messageToSend = inputMessage.value.trim()
   inputMessage.value = ''
@@ -109,4 +125,41 @@ defineExpose({
   useExample,
   focus: () => messageInput.value?.focus()
 })
-</script> 
+</script>
+
+<style scoped>
+/* Removed unused animations */
+/* @keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
+} */
+
+/* Improved focus styles for better accessibility */
+textarea:focus-visible {
+  outline: 2px solid rgb(59 130 246 / 0.5);
+  outline-offset: 2px;
+}
+
+/* Better disabled state styling */
+textarea:disabled {
+  background-color: rgb(156 163 175 / 0.1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button {
+    transition: none;
+  }
+  
+  textarea {
+    transition: none;
+  }
+}
+</style> 

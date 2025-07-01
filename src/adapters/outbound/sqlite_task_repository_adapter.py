@@ -33,6 +33,7 @@ class SQLiteTaskRepositoryAdapter(TaskRepositoryPort):
                 CREATE TABLE IF NOT EXISTS tasks (
                     id TEXT PRIMARY KEY,
                     description TEXT NOT NULL,
+                    account_alias TEXT NOT NULL,
                     status TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     completed_at TEXT,
@@ -54,6 +55,7 @@ class SQLiteTaskRepositoryAdapter(TaskRepositoryPort):
         return {
             'id': task.id,
             'description': task.description,
+            'account_alias': task.account_alias,
             'status': task.status.value,
             'created_at': task.created_at.isoformat(),
             'completed_at': task.completed_at.isoformat() if task.completed_at else None,
@@ -67,6 +69,7 @@ class SQLiteTaskRepositoryAdapter(TaskRepositoryPort):
         return Task(
             id=row['id'],
             description=row['description'],
+            account_alias=row['account_alias'],
             status=TaskStatus(row['status']),
             created_at=datetime.fromisoformat(row['created_at']),
             completed_at=datetime.fromisoformat(row['completed_at']) if row['completed_at'] else None,
@@ -86,10 +89,10 @@ class SQLiteTaskRepositoryAdapter(TaskRepositoryPort):
             async with aiosqlite.connect(self.db_path) as db:
                 await db.execute("""
                     INSERT OR REPLACE INTO tasks 
-                    (id, description, status, created_at, completed_at, result, error_message, metadata)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, description, account_alias, status, created_at, completed_at, result, error_message, metadata)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    task_dict['id'], task_dict['description'], task_dict['status'], 
+                    task_dict['id'], task_dict['description'], task_dict['account_alias'], task_dict['status'], 
                     task_dict['created_at'], task_dict['completed_at'],
                     task_dict['result'], task_dict['error_message'], task_dict['metadata']
                 ))

@@ -9,6 +9,7 @@ export interface ChatMessage {
 export interface ChatRequest {
   message: string
   conversation_id?: string
+  account_alias?: string
 }
 
 export interface ChatResponse {
@@ -21,6 +22,7 @@ export interface ChatResponse {
 export interface Conversation {
   id: string
   title: string
+  account_id: string
   created_at: Date
   updated_at: Date
 }
@@ -32,6 +34,7 @@ export interface TaskRequest {
 export interface TaskResponse {
   task_id: string
   description: string
+  account_alias: string
   status: string
   result?: string
   error_message?: string
@@ -68,6 +71,33 @@ export interface AWSCredentialsValidation {
   account_id?: string
   region?: string
   user_arn?: string
+}
+
+// Multi-Account AWS Management Types
+export interface AWSAccount {
+  alias: string
+  account_id?: string
+  description?: string
+  is_default: boolean
+  region: string
+  uses_profile: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface AWSAccountRequest {
+  alias: string
+  credentials: AWSCredentialsRequest
+  description?: string
+  set_as_default?: boolean
+}
+
+export interface AWSAccountUpdateRequest {
+  credentials: AWSCredentialsRequest
+}
+
+export interface SetActiveAccountRequest {
+  account_alias: string
 }
 
 export interface HealthCheck {

@@ -1,19 +1,28 @@
 <template>
-  <div class="h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white overflow-y-auto">
+  <div class="h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white overflow-y-auto relative">
+    <!-- Loading Indicator -->
+    <LoadingIndicator 
+      :is-loading="tasksStore.isLoading || isCreatingTask || isCreatingQuickTask"
+      :loading-message="getLoadingMessage()"
+    />
+
     <div class="max-w-4xl mx-auto p-6">
       <!-- Header -->
       <div class="mb-8">
         <div class="flex items-center justify-between mb-4">
           <h1 class="text-2xl font-semibold text-primary">Task Management</h1>
-          <button
-            @click="showCreateTask = true"
-            class="btn-primary flex items-center gap-2"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-            </svg>
-            New Task
-          </button>
+          <div class="flex items-center gap-3">
+            <AWSAccountSelector />
+            <button
+              @click="showCreateTask = true"
+              class="btn-primary flex items-center gap-2"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+              </svg>
+              New Task
+            </button>
+          </div>
         </div>
         
         <!-- Stats -->
@@ -53,7 +62,7 @@
             <button
               @click="createQuickTask"
               :disabled="!quickTaskDescription.trim() || isCreatingQuickTask"
-              class="absolute right-2 top-1.5 px-3 py-1 bg-primary text-white rounded text-sm hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              class="absolute right-2 top-1.5 px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {{ isCreatingQuickTask ? '...' : 'Add' }}
             </button>
@@ -76,7 +85,15 @@
 
       <!-- Task List -->
       <div class="space-y-3">
+        <!-- Show skeleton while loading -->
+        <SkeletonLoader 
+          v-if="tasksStore.isLoading && tasksStore.tasks.length === 0"
+          type="tasks"
+          :count="5"
+        />
+        
         <div 
+          v-else-if="filteredTasks.length > 0"
           v-for="task in filteredTasks"
           :key="task.task_id"
           v-memo="[task.task_id, task.status, task.description, task.created_at]"
@@ -168,6 +185,9 @@ import { useRouter } from 'vue-router'
 import { useTasksStore } from '@/stores/tasks'
 import { apiService } from '@/services/api'
 import type { TaskResponse } from '@/types/api'
+import AWSAccountSelector from '@/components/AWSAccountSelector.vue'
+import LoadingIndicator from '@/components/LoadingIndicator.vue'
+import SkeletonLoader from '@/components/SkeletonLoader.vue'
 
 const router = useRouter()
 const tasksStore = useTasksStore()
@@ -186,7 +206,7 @@ watch(searchQuery, (newValue) => {
   }
   searchTimeout = setTimeout(() => {
     debouncedSearchQuery.value = newValue
-  }, 300) // 300ms debounce
+  }, 150) // Reduced from 300ms to 150ms for more responsive feel
 })
 const showCreateTask = ref(false)
 const isCreatingTask = ref(false)
@@ -293,6 +313,13 @@ const getStatusColor = (status: string) => {
 
 const getStatusText = (status: string) => {
   return status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')
+}
+
+const getLoadingMessage = () => {
+  if (isCreatingTask.value) return 'Creating new task...'
+  if (isCreatingQuickTask.value) return 'Adding quick task...'
+  if (tasksStore.isLoading) return 'Loading tasks...'
+  return 'Processing...'
 }
 
 onMounted(() => {

@@ -109,8 +109,9 @@ def create_api_app():
     task_service = container.task_application_service()
     aws_service = container.aws_application_service()
     chat_service = container.chat_application_service()
+    aws_account_service = container.aws_account_application_service()
     
-    api_adapter = FastAPIAdapter(task_service, aws_service, chat_service)
+    api_adapter = FastAPIAdapter(task_service, aws_service, chat_service, aws_account_service)
     
     logger.info("API server initialized successfully with AWS credentials")
     

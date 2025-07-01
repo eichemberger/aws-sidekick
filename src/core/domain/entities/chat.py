@@ -28,12 +28,14 @@ class Conversation:
     title: str
     created_at: datetime
     updated_at: datetime
+    account_id: str  # AWS account ID this conversation is associated with
     
     def to_dict(self) -> dict:
         """Convert to dictionary for API responses."""
         return {
             'id': self.id,
             'title': self.title,
+            'account_id': self.account_id,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         } 

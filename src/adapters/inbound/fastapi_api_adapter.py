@@ -13,6 +13,7 @@ import pathlib
 from core.ports.inbound.task_service_port import TaskServicePort
 from core.ports.inbound.aws_service_port import AWSServicePort
 from core.ports.inbound.chat_service_port import ChatServicePort
+from core.ports.inbound.aws_account_service_port import AWSAccountServicePort
 # Removed TaskType import - simplified to just background task execution
 from core.domain.value_objects.aws_credentials import AWSCredentials
 from infrastructure.config import get_config
@@ -39,6 +40,7 @@ class TaskResponse(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(..., description="Chat message to send to the agent")
     conversation_id: Optional[str] = Field(None, description="ID of the conversation to continue")
+    account_alias: Optional[str] = Field(None, description="AWS account alias to use for this chat")
 
 
 class ChatResponse(BaseModel):
@@ -51,6 +53,7 @@ class ChatResponse(BaseModel):
 class ConversationResponse(BaseModel):
     id: str
     title: str
+    account_id: str
     created_at: datetime
     updated_at: datetime
 
@@ -91,6 +94,41 @@ class TaskCreatedResponse(BaseModel):
     message: str = "Task created and executing in background"
 
 
+# Multi-Account AWS Management Models
+class AWSAccountRequest(BaseModel):
+    alias: str = Field(..., description="Unique alias for the AWS account")
+    credentials: AWSCredentialsRequest = Field(..., description="AWS credentials")
+    description: Optional[str] = Field(None, description="Optional description of the account")
+    set_as_default: bool = Field(False, description="Set this account as the default")
+
+
+class AWSAccountResponse(BaseModel):
+    alias: str
+    description: Optional[str] = None
+    region: str
+    account_id: Optional[str] = None
+    uses_profile: bool
+    is_default: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class AWSAccountUpdateRequest(BaseModel):
+    credentials: AWSCredentialsRequest = Field(..., description="Updated AWS credentials")
+
+
+class SetActiveAccountRequest(BaseModel):
+    account_alias: str = Field(..., description="Alias of the account to set as active")
+
+
+class ActiveAccountResponse(BaseModel):
+    account_alias: Optional[str] = None
+
+
+class ValidationResponse(BaseModel):
+    valid: bool
+
+
 class FastAPIAdapter:
     """FastAPI adapter for the AWS Cloud Engineer Agent API"""
 
@@ -98,11 +136,13 @@ class FastAPIAdapter:
         self,
         task_service: TaskServicePort,
         aws_service: AWSServicePort,
-        chat_service: ChatServicePort
+        chat_service: ChatServicePort,
+        aws_account_service: AWSAccountServicePort
     ):
         self._task_service = task_service
         self._aws_service = aws_service
         self._chat_service = chat_service
+        self._aws_account_service = aws_account_service
         
         # Get agent repository from container
         container = get_container()
@@ -194,19 +234,74 @@ class FastAPIAdapter:
         @self._app.post("/api/chat", response_model=ChatResponse, summary="Chat with the agent")
         async def chat(request: ChatRequest):
             """Send a message to the agent and get immediate response with persistence"""
+            conversation = None
+            conversation_id = None
+            
             try:
+                # Get the AWS account alias for this chat session
+                # Prefer the account_alias from the request, fallback to active session account
+                account_alias = request.account_alias or self._aws_service.get_active_account_alias()
+                
+                # Validate that we have an account to work with
+                if not account_alias:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="No AWS account selected. Please select an AWS account before sending messages."
+                    )
+                
+                # CRITICAL: Switch to the correct account credentials BEFORE processing
+                logger = get_logger(__name__)
+                logger.info(f"Ensuring credentials loaded for account: {account_alias}")
+                
+                # Debug: Check environment BEFORE switching
+                import os
+                logger.info(f"BEFORE switch - AWS_ACCESS_KEY_ID: {'***' if os.environ.get('AWS_ACCESS_KEY_ID') else 'NOT_SET'}")
+                logger.info(f"BEFORE switch - AWS_PROFILE: {os.environ.get('AWS_PROFILE', 'NOT_SET')}")
+                logger.info(f"BEFORE switch - AWS_DEFAULT_REGION: {os.environ.get('AWS_DEFAULT_REGION', 'NOT_SET')}")
+                
+                try:
+                    await self._aws_service.set_active_account(account_alias)
+                    logger.info("Credentials switched successfully")
+                    
+                    # Debug: Check environment AFTER switching
+                    logger.info(f"AFTER switch - AWS_ACCESS_KEY_ID: {'***' if os.environ.get('AWS_ACCESS_KEY_ID') else 'NOT_SET'}")
+                    logger.info(f"AFTER switch - AWS_PROFILE: {os.environ.get('AWS_PROFILE', 'NOT_SET')}")
+                    logger.info(f"AFTER switch - AWS_DEFAULT_REGION: {os.environ.get('AWS_DEFAULT_REGION', 'NOT_SET')}")
+                    
+                except ValueError as e:
+                    logger.error(f"Failed to switch to account '{account_alias}': {e}")
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"Failed to load credentials for account '{account_alias}'. Please re-enter credentials via the UI."
+                    )
+                except Exception as e:
+                    logger.error(f"Unexpected error switching to account '{account_alias}': {e}")
+                    raise HTTPException(
+                        status_code=500, 
+                        detail="Failed to switch AWS account credentials"
+                    )
+                
                 # Get or create conversation
                 if request.conversation_id:
                     conversation = await self._chat_service.get_conversation(request.conversation_id)
                     if not conversation:
                         raise HTTPException(status_code=404, detail="Conversation not found")
+                    conversation_id = conversation.id
+                    
+                    # Double-check credentials for existing conversation's account
+                    await self._ensure_credentials_loaded_for_account(conversation.account_id)
                 else:
-                    # For new conversations, create one with a title based on the message
-                    conversation = await self._chat_service.create_conversation_from_message(request.message)
+                    # For new conversations, create one with the account alias
+                    conversation = await self._chat_service.create_conversation_from_message(
+                        request.message, 
+                        account_alias=account_alias
+                    )
+                    conversation_id = conversation.id
+                    logger.info(f"Created new conversation {conversation_id} with account_id: {conversation.account_id}")
                 
                 # Add user message to conversation
                 user_message = await self._chat_service.add_message_to_conversation(
-                    conversation.id, 'user', request.message
+                    conversation_id, 'user', request.message
                 )
                 
                 # Execute using the dedicated chat method for better responsiveness
@@ -217,34 +312,61 @@ class FastAPIAdapter:
                 
                 # Add assistant response to conversation
                 assistant_message = await self._chat_service.add_message_to_conversation(
-                    conversation.id, 'assistant', cleaned_response
+                    conversation_id, 'assistant', cleaned_response
                 )
                 
                 return ChatResponse(
                     response=cleaned_response,
                     timestamp=assistant_message.timestamp,
-                    conversation_id=conversation.id,
+                    conversation_id=conversation_id,
                     message_id=assistant_message.id
                 )
                 
+            except HTTPException:
+                raise
             except Exception as e:
-                # Still try to persist error message if we have a conversation
+                logger = get_logger(__name__)
+                logger.error(f"Error in chat endpoint: {e}")
+                
+                # Create error message
                 error_msg = f"❌ I'm having trouble processing your request: {str(e)}. Please try again."
                 
-                try:
-                    if 'conversation' in locals():
+                # If we have a conversation, try to persist the error message
+                if conversation_id:
+                    try:
                         await self._chat_service.add_message_to_conversation(
-                            conversation.id, 'assistant', error_msg
+                            conversation_id, 'assistant', error_msg
                         )
-                except Exception:
-                    pass  # Don't fail the entire request if we can't persist the error
+                        # Return with the actual conversation ID
+                        return ChatResponse(
+                            response=error_msg,
+                            timestamp=datetime.now(),
+                            conversation_id=conversation_id,
+                            message_id=str(uuid.uuid4())
+                        )
+                    except Exception as persist_error:
+                        logger.error(f"Failed to persist error message: {persist_error}")
                 
-                return ChatResponse(
-                    response=error_msg,
-                    timestamp=datetime.now(),
-                    conversation_id=getattr(locals().get('conversation'), 'id', 'unknown'),
-                    message_id=str(uuid.uuid4())
-                )
+                # If no conversation or persistence failed, create a temporary conversation
+                try:
+                    # Use the same account alias for error conversation
+                    temp_conversation = await self._chat_service.create_conversation_from_message(
+                        request.message, 
+                        account_alias=account_alias
+                    )
+                    await self._chat_service.add_message_to_conversation(temp_conversation.id, 'user', request.message)
+                    await self._chat_service.add_message_to_conversation(temp_conversation.id, 'assistant', error_msg)
+                    
+                    return ChatResponse(
+                        response=error_msg,
+                        timestamp=datetime.now(),
+                        conversation_id=temp_conversation.id,
+                        message_id=str(uuid.uuid4())
+                    )
+                except Exception as temp_error:
+                    logger.error(f"Failed to create temporary conversation: {temp_error}")
+                    # Last resort: return error without conversation persistence
+                    raise HTTPException(status_code=500, detail="Failed to process chat request")
 
         @self._app.post("/api/chat-async", response_model=TaskCreatedResponse, status_code=202, summary="Chat with the agent asynchronously")
         async def chat_async(request: ChatRequest):
@@ -510,6 +632,265 @@ class FastAPIAdapter:
                 logger.error(f"Error clearing AWS credentials: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
+        # Multi-Account AWS Management Endpoints
+        @self._app.post("/api/aws/accounts", response_model=AWSAccountResponse, status_code=201, summary="Register AWS account")
+        async def register_aws_account(request: AWSAccountRequest):
+            """Register a new AWS account"""
+            try:
+                # Convert Pydantic model to domain credentials
+                credentials = AWSCredentials(
+                    access_key_id=request.credentials.access_key_id,
+                    secret_access_key=request.credentials.secret_access_key,
+                    session_token=request.credentials.session_token,
+                    region=request.credentials.region,
+                    profile=request.credentials.profile
+                )
+                
+                account = await self._aws_account_service.register_account(
+                    alias=request.alias,
+                    credentials=credentials,
+                    description=request.description,
+                    set_as_default=request.set_as_default
+                )
+                
+                return AWSAccountResponse(
+                    alias=account.alias,
+                    description=account.description,
+                    region=account.region,
+                    account_id=account.account_id,
+                    uses_profile=account.uses_profile,
+                    is_default=account.is_default,
+                    created_at=account.created_at,
+                    updated_at=account.updated_at
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error registering AWS account: {e}")
+                raise HTTPException(status_code=500, detail="Failed to register AWS account")
+
+        @self._app.get("/api/aws/accounts", response_model=List[AWSAccountResponse], summary="List AWS accounts")
+        async def list_aws_accounts():
+            """List all registered AWS accounts"""
+            try:
+                accounts = await self._aws_account_service.list_accounts()
+                return [
+                    AWSAccountResponse(
+                        alias=account.alias,
+                        description=account.description,
+                        region=account.region,
+                        account_id=account.account_id,
+                        uses_profile=account.uses_profile,
+                        is_default=account.is_default,
+                        created_at=account.created_at,
+                        updated_at=account.updated_at
+                    )
+                    for account in accounts
+                ]
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error listing AWS accounts: {e}")
+                raise HTTPException(status_code=500, detail="Failed to list AWS accounts")
+
+        @self._app.get("/api/aws/accounts/{alias}", response_model=AWSAccountResponse, summary="Get AWS account")
+        async def get_aws_account(alias: str):
+            """Get a specific AWS account by alias"""
+            try:
+                account = await self._aws_account_service.get_account(alias)
+                if not account:
+                    raise HTTPException(status_code=404, detail=f"AWS account '{alias}' not found")
+                
+                return AWSAccountResponse(
+                    alias=account.alias,
+                    description=account.description,
+                    region=account.region,
+                    account_id=account.account_id,
+                    uses_profile=account.uses_profile,
+                    is_default=account.is_default,
+                    created_at=account.created_at,
+                    updated_at=account.updated_at
+                )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error getting AWS account: {e}")
+                raise HTTPException(status_code=500, detail="Failed to get AWS account")
+
+        @self._app.put("/api/aws/accounts/{alias}/credentials", response_model=AWSAccountResponse, summary="Update AWS account credentials")
+        async def update_aws_account_credentials(alias: str, request: AWSAccountUpdateRequest):
+            """Update credentials for an AWS account"""
+            try:
+                # Convert Pydantic model to domain credentials
+                credentials = AWSCredentials(
+                    access_key_id=request.credentials.access_key_id,
+                    secret_access_key=request.credentials.secret_access_key,
+                    session_token=request.credentials.session_token,
+                    region=request.credentials.region,
+                    profile=request.credentials.profile
+                )
+                
+                account = await self._aws_account_service.update_account_credentials(alias, credentials)
+                
+                return AWSAccountResponse(
+                    alias=account.alias,
+                    description=account.description,
+                    region=account.region,
+                    account_id=account.account_id,
+                    uses_profile=account.uses_profile,
+                    is_default=account.is_default,
+                    created_at=account.created_at,
+                    updated_at=account.updated_at
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error updating AWS account credentials: {e}")
+                raise HTTPException(status_code=500, detail="Failed to update AWS account credentials")
+
+        @self._app.delete("/api/aws/accounts/{alias}", status_code=204, summary="Delete AWS account")
+        async def delete_aws_account(alias: str):
+            """Delete an AWS account"""
+            try:
+                success = await self._aws_account_service.delete_account(alias)
+                if not success:
+                    raise HTTPException(status_code=404, detail=f"AWS account '{alias}' not found")
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error deleting AWS account: {e}")
+                raise HTTPException(status_code=500, detail="Failed to delete AWS account")
+
+        @self._app.get("/api/aws/accounts/default", response_model=AWSAccountResponse, summary="Get default AWS account")
+        async def get_default_aws_account():
+            """Get the default AWS account"""
+            try:
+                account = await self._aws_account_service.get_default_account()
+                if not account:
+                    raise HTTPException(status_code=404, detail="No default AWS account set")
+                
+                return AWSAccountResponse(
+                    alias=account.alias,
+                    description=account.description,
+                    region=account.region,
+                    account_id=account.account_id,
+                    uses_profile=account.uses_profile,
+                    is_default=account.is_default,
+                    created_at=account.created_at,
+                    updated_at=account.updated_at
+                )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error getting default AWS account: {e}")
+                raise HTTPException(status_code=500, detail="Failed to get default AWS account")
+
+        @self._app.post("/api/aws/accounts/{alias}/default", status_code=204, summary="Set default AWS account")
+        async def set_default_aws_account(alias: str):
+            """Set an AWS account as the default"""
+            try:
+                success = await self._aws_account_service.set_default_account(alias)
+                if not success:
+                    raise HTTPException(status_code=404, detail=f"AWS account '{alias}' not found")
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error setting default AWS account: {e}")
+                raise HTTPException(status_code=500, detail="Failed to set default AWS account")
+
+        @self._app.post("/api/aws/active-account", status_code=204, summary="Set active AWS account")
+        async def set_active_aws_account(request: SetActiveAccountRequest):
+            """Set the active AWS account for the current session"""
+            try:
+                await self._aws_service.set_active_account(request.account_alias)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error setting active AWS account: {e}")
+                raise HTTPException(status_code=500, detail="Failed to set active AWS account")
+
+        @self._app.delete("/api/aws/active-account", status_code=204, summary="Clear active AWS account")
+        async def clear_active_aws_account():
+            """Clear the active AWS account for the current session"""
+            try:
+                await self._aws_service.clear_active_account()
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error clearing active AWS account: {e}")
+                raise HTTPException(status_code=500, detail="Failed to clear active AWS account")
+
+        @self._app.get("/api/aws/active-account", response_model=ActiveAccountResponse, summary="Get active AWS account")
+        async def get_active_aws_account():
+            """Get the currently active AWS account alias"""
+            try:
+                active_alias = self._aws_service.get_active_account_alias()
+                return ActiveAccountResponse(account_alias=active_alias)
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error getting active AWS account: {e}")
+                raise HTTPException(status_code=500, detail="Failed to get active AWS account")
+
+        @self._app.post("/api/aws/accounts/{alias}/validate", response_model=ValidationResponse, summary="Validate AWS account credentials")
+        async def validate_aws_account_credentials(alias: str):
+            """Validate the credentials for an AWS account"""
+            try:
+                is_valid = await self._aws_account_service.validate_account_credentials(alias)
+                return ValidationResponse(valid=is_valid)
+            except ValueError as e:
+                raise HTTPException(status_code=404, detail=str(e))
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error validating AWS account credentials: {e}")
+                raise HTTPException(status_code=500, detail="Failed to validate AWS account credentials")
+
+        @self._app.get("/debug/credentials-status")
+        async def debug_credentials_status():
+            """Debug endpoint to check credential storage status"""
+            try:
+                import os
+                from infrastructure.credential_manager import get_credential_manager
+                credential_manager = get_credential_manager()
+                
+                # Get all accounts with credentials in memory
+                accounts_with_creds = await credential_manager.list_accounts_with_credentials()
+                
+                # Get active account info
+                active_alias = self._aws_service.get_active_account_alias()
+                
+                # Get current environment variables
+                env_vars = {
+                    "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID", "NOT_SET"),
+                    "AWS_SECRET_ACCESS_KEY": "***" if os.environ.get("AWS_SECRET_ACCESS_KEY") else "NOT_SET",
+                    "AWS_SESSION_TOKEN": "***" if os.environ.get("AWS_SESSION_TOKEN") else "NOT_SET",
+                    "AWS_PROFILE": os.environ.get("AWS_PROFILE", "NOT_SET"),
+                    "AWS_DEFAULT_REGION": os.environ.get("AWS_DEFAULT_REGION", "NOT_SET")
+                }
+                
+                debug_info = {
+                    "active_account_alias": active_alias,
+                    "accounts_with_credentials_in_memory": accounts_with_creds,
+                    "total_accounts_with_credentials": len(accounts_with_creds),
+                    "current_environment_variables": env_vars
+                }
+                
+                # If there's an active account, check if it has credentials
+                if active_alias:
+                    has_creds = await credential_manager.has_credentials(active_alias)
+                    debug_info["active_account_has_credentials"] = has_creds
+                
+                return debug_info
+                
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error in debug credentials status: {e}")
+                raise HTTPException(status_code=500, detail="Internal server error")
+
         # Chat/Conversation Management Endpoints
         @self._app.get("/api/conversations", response_model=List[ConversationResponse], summary="List conversations")
         async def list_conversations(limit: int = 50, offset: int = 0):
@@ -597,6 +978,57 @@ class FastAPIAdapter:
             return FileResponse(str(index_file))
 
     # Removed _classify_user_input method - simplified task system
+
+    async def _ensure_credentials_loaded_for_account(self, account_id: str):
+        """Ensure credentials are loaded for the given account ID and reinitialize MCPs if needed."""
+        try:
+            # Skip if this is a default/fallback account
+            if account_id == "default":
+                return
+            
+            # Try to find the account by ID first
+            account = None
+            accounts = await self._aws_account_service.list_accounts()
+            for acc in accounts:
+                if acc.account_id == account_id:
+                    account = acc
+                    break
+            
+            # If not found by account_id, try by alias (for backward compatibility)
+            if not account:
+                try:
+                    account = await self._aws_account_service.get_account(account_id)
+                except:
+                    pass
+            
+            if not account:
+                logger = get_logger(__name__)
+                logger.warning(f"Account with ID '{account_id}' not found, using default credentials")
+                return
+            
+            # Load credentials from memory
+            credentials_loaded = await account.load_credentials()
+            if not credentials_loaded or not account.credentials:
+                logger = get_logger(__name__)
+                logger.warning(f"No credentials found for account '{account.alias}' (ID: {account_id})")
+                return
+            
+            # Check if this account is already the active one
+            current_active = self._aws_service.get_active_account_alias()
+            if current_active == account.alias:
+                # Already active, no need to switch
+                return
+            
+            # Switch to this account's credentials
+            await self._aws_service.set_active_account(account.alias)
+            
+            logger = get_logger(__name__)
+            logger.info(f"Switched to account '{account.alias}' (ID: {account_id}) for conversation")
+            
+        except Exception as e:
+            logger = get_logger(__name__)
+            logger.error(f"Error ensuring credentials for account {account_id}: {e}")
+            # Continue with current credentials rather than failing
 
     def _clean_response(self, response):
         """Clean and format response from agent"""

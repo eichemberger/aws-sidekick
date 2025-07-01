@@ -14,10 +14,12 @@ from core.domain.value_objects.aws_credentials import AWSCredentials
 from core.ports.inbound.task_service_port import TaskServicePort
 from core.ports.inbound.aws_service_port import AWSServicePort
 from core.ports.inbound.chat_service_port import ChatServicePort
+from core.ports.inbound.aws_account_service_port import AWSAccountServicePort
 from core.ports.outbound.aws_client_port import AWSClientPort
 from core.ports.outbound.agent_repository_port import AgentRepositoryPort
 from core.ports.outbound.task_repository_port import TaskRepositoryPort
 from core.ports.outbound.chat_repository_port import ChatRepositoryPort
+from core.ports.outbound.aws_account_repository_port import AWSAccountRepositoryPort
 
 # Use Cases
 from core.use_cases.execute_task_use_case import ExecuteTaskUseCase
@@ -27,6 +29,7 @@ from core.use_cases.aws_analysis_use_case import AWSAnalysisUseCase
 from application.services.task_application_service import TaskApplicationService
 from application.services.aws_application_service import AWSApplicationService
 from application.services.chat_application_service import ChatApplicationService
+from application.services.aws_account_application_service import AWSAccountApplicationService
 
 # Adapters
 from adapters.outbound.aws_client_adapter import AWSClientAdapter
@@ -34,6 +37,7 @@ from adapters.outbound.agent_repository_adapter import AgentRepositoryAdapter
 from adapters.outbound.task_repository_adapter import InMemoryTaskRepositoryAdapter
 from adapters.outbound.sqlite_task_repository_adapter import SQLiteTaskRepositoryAdapter
 from adapters.outbound.sqlite_chat_repository_adapter import SQLiteChatRepositoryAdapter
+from adapters.outbound.sqlite_aws_account_repository_adapter import SQLiteAWSAccountRepositoryAdapter
 from adapters.outbound.mcp_reinitialization_adapter import MCPReinitializationAdapter
 
 
@@ -55,15 +59,28 @@ class DependencyContainer:
 
     def reinitialize_agent_with_new_credentials(self):
         """Reinitialize agent and MCP servers with updated credentials"""
+        from infrastructure.logging import get_logger
+        logger = get_logger(__name__)
+        
+        logger.info("Starting MCP agent reinitialization with new credentials")
+        
         # Clear agent repository to force recreation with new agent
         if 'agent_repository' in self._instances:
             del self._instances['agent_repository']
+            logger.info("Cleared cached agent repository instance")
+        
+        # Also clear the AWS analysis use case which depends on agent
+        if 'aws_analysis_use_case' in self._instances:
+            del self._instances['aws_analysis_use_case']
+            logger.info("Cleared cached AWS analysis use case instance")
         
         # Reinitialize MCP servers and agent
+        logger.info("Calling MCP manager to reinitialize with credentials")
         agent, docs_tools, diagram_tools, github_tools = self._mcp_manager.reinitialize_with_credentials()
         
         # Update configuration
         self.configure_agent(agent, docs_tools, diagram_tools, github_tools)
+        logger.info("MCP agent reinitialization completed successfully")
 
     def get_mcp_reinitialization_adapter(self) -> MCPReinitializationAdapter:
         """Get MCP reinitialization adapter"""
@@ -110,10 +127,52 @@ class DependencyContainer:
             config = get_config()
             # Always use SQLite for chats since they need persistence
             chat_db_path = config.database.sqlite_path.replace('tasks.db', 'chats.db')
+            
+            # Run chat database migration if needed
+            import asyncio
+            from infrastructure.chat_migration_helper import migrate_chat_database_if_needed
+            
+            # Run migration synchronously during initialization
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                migration_success = loop.run_until_complete(migrate_chat_database_if_needed(chat_db_path))
+                if not migration_success:
+                    logger = get_logger(__name__)
+                    logger.warning("Chat database migration failed, continuing anyway")
+            finally:
+                loop.close()
+            
             self._instances['chat_repository'] = SQLiteChatRepositoryAdapter(
                 db_path=chat_db_path
             )
         return self._instances['chat_repository']
+
+    def get_aws_account_repository_adapter(self) -> AWSAccountRepositoryPort:
+        """Get AWS account repository adapter"""
+        if 'aws_account_repository' not in self._instances:
+            config = get_config()
+            # Always use SQLite for AWS accounts since they need persistence
+            account_db_path = config.database.sqlite_path.replace('tasks.db', 'aws_accounts.db')
+            
+            # Run database migration if needed (security fix)
+            import asyncio
+            from infrastructure.migration_helper import migrate_database_if_needed
+            
+            # Run migration synchronously during initialization
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                migration_success = loop.run_until_complete(migrate_database_if_needed(account_db_path))
+                if not migration_success:
+                    raise RuntimeError("Database migration failed")
+            finally:
+                loop.close()
+            
+            self._instances['aws_account_repository'] = SQLiteAWSAccountRepositoryAdapter(
+                db_path=account_db_path
+            )
+        return self._instances['aws_account_repository']
 
     def get_execute_task_use_case(self) -> ExecuteTaskUseCase:
         """Get execute task use case"""
@@ -147,6 +206,7 @@ class DependencyContainer:
         if 'aws_service' not in self._instances:
             self._instances['aws_service'] = AWSApplicationService(
                 aws_analysis_use_case=self.get_aws_analysis_use_case(),
+                account_repository=self.get_aws_account_repository_adapter(),
                 mcp_reinitialization_port=self.get_mcp_reinitialization_adapter(),
                 default_credentials=default_credentials
             )
@@ -156,9 +216,20 @@ class DependencyContainer:
         """Get chat application service"""
         if 'chat_service' not in self._instances:
             self._instances['chat_service'] = ChatApplicationService(
-                chat_repository=self.get_chat_repository_adapter()
+                chat_repository=self.get_chat_repository_adapter(),
+                aws_service=self.get_aws_service(),
+                aws_account_service=self.get_aws_account_service()
             )
         return self._instances['chat_service']
+
+    def get_aws_account_service(self) -> AWSAccountServicePort:
+        """Get AWS account application service"""
+        if 'aws_account_service' not in self._instances:
+            self._instances['aws_account_service'] = AWSAccountApplicationService(
+                account_repository=self.get_aws_account_repository_adapter(),
+                aws_client=self.get_aws_client_adapter()
+            )
+        return self._instances['aws_account_service']
 
 
 
@@ -174,6 +245,10 @@ class DependencyContainer:
     def chat_application_service(self) -> ChatServicePort:
         """Get chat application service (convenience method)"""
         return self.get_chat_service()
+
+    def aws_account_application_service(self) -> AWSAccountServicePort:
+        """Get AWS account application service (convenience method)"""
+        return self.get_aws_account_service()
 
     def reset(self):
         """Reset all instances (useful for testing)"""

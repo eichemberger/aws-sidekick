@@ -80,21 +80,15 @@
     <div class="flex-1 flex flex-col bg-white dark:bg-gray-900">
       <router-view />
     </div>
-    
-    <!-- Performance Monitor (dev only) -->
-    <PerformanceMonitor />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, defineAsyncComponent } from 'vue'
+import { onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
 import { useThemeStore } from '@/stores/theme'
 import ThemeToggle from '@/components/ThemeToggle.vue'
-
-// Lazy load performance monitor
-const PerformanceMonitor = defineAsyncComponent(() => import('@/components/PerformanceMonitor.vue'))
 
 const router = useRouter()
 const route = useRoute()
