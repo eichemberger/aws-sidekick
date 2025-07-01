@@ -62,10 +62,10 @@ def main():
     logger.info(**log_agent_lifecycle(phase="starting", message="Initializing AWS Cloud Engineer Agent"))
     
     try:
-        config = initialize_config()
+        config = initialize_config(require_aws_credentials=False)  # Don't require AWS credentials at startup
         
-        # Validate configuration including AWS credentials
-        config.validate()
+        # Validate configuration but skip AWS credential validation
+        config.validate(require_aws_credentials=False)
         
         config.print_status()
         

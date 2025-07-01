@@ -80,8 +80,12 @@ class AWSConfig:
     secret_access_key: Optional[str] = None
     session_token: Optional[str] = None
     
-    def validate(self) -> None:
+    def validate(self, require_credentials: bool = False) -> None:
         """Validate AWS configuration"""
+        if not require_credentials:
+            # Skip credential validation during startup - credentials can be set later via UI
+            return
+            
         has_keys = bool(self.access_key_id and self.secret_access_key)
         has_profile = bool(self.profile)
         
@@ -434,11 +438,11 @@ class Config:
             environment=os.getenv("ENVIRONMENT", "development")
         )
     
-    def validate(self) -> None:
+    def validate(self, require_aws_credentials: bool = False) -> None:
         """Validate all configuration settings"""
         try:
             self.model.validate()
-            self.aws.validate()
+            self.aws.validate(require_credentials=require_aws_credentials)
             self.database.validate()
         except ValueError as e:
             raise ValueError(f"Configuration validation failed: {str(e)}")
@@ -477,16 +481,16 @@ def get_config() -> Config:
     global _config
     if _config is None:
         _config = Config.from_env()
-        _config.validate()
+        _config.validate(require_aws_credentials=False)  # Don't require AWS credentials at startup
     return _config
 
 
-def initialize_config(env_file: Optional[str] = None, validate: bool = True) -> Config:
+def initialize_config(env_file: Optional[str] = None, validate: bool = True, require_aws_credentials: bool = False) -> Config:
     """Initialize the global configuration"""
     global _config
     _config = Config.from_env(env_file)
     if validate:
-        _config.validate()
+        _config.validate(require_aws_credentials=require_aws_credentials)
     return _config
 
 

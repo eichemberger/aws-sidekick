@@ -26,21 +26,21 @@ from main import initialize_agent  # noqa: E402
 logger = get_logger(__name__)
 
 
-def validate_and_set_aws_credentials():
-    """Validate AWS credentials are available and set environment variables for MCP tools"""
+def set_aws_credentials_if_available():
+    """Set AWS credentials as environment variables if they are available"""
     config = get_config()
+    
+    # Always set the region, even if no credentials are configured
+    os.environ["AWS_DEFAULT_REGION"] = config.aws.default_region
+    logger.info(f"aws_region_set | region=<{config.aws.default_region}>")
     
     # Check if any AWS credentials are configured
     has_keys = bool(config.aws.access_key_id and config.aws.secret_access_key)
     has_profile = bool(config.aws.profile)
     
     if not has_keys and not has_profile:
-        raise RuntimeError(
-            "No AWS credentials found. Please configure either:\n"
-            "1. AWS access keys: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY\n"
-            "2. AWS profile: AWS_PROFILE\n"
-            "Set these in your .env file or environment variables."
-        )
+        logger.info("no_aws_credentials_configured | credentials can be set later via UI")
+        return
     
     # Set environment variables for MCP tools to use
     if has_keys:
@@ -59,10 +59,6 @@ def validate_and_set_aws_credentials():
             if key in os.environ:
                 del os.environ[key]
         logger.info(f"aws_credentials_initialized | type=<profile> | profile=<{config.aws.profile}>")
-    
-    # Always set the region
-    os.environ["AWS_DEFAULT_REGION"] = config.aws.default_region
-    logger.info(f"aws_region_set | region=<{config.aws.default_region}>")
 
 
 def create_api_app():
@@ -90,14 +86,10 @@ def create_api_app():
     
     logger.info("initializing API server")
     
-    # CRITICAL: Validate and set AWS credentials BEFORE initializing MCP
-    try:
-        validate_and_set_aws_credentials()
-    except RuntimeError as e:
-        logger.error(f"aws_credentials_validation_failed | {str(e)}")
-        raise
+    # Set AWS credentials if available, but don't require them at startup
+    set_aws_credentials_if_available()
     
-    # Now initialize agent with credentials available
+    # Initialize agent (credentials will be set dynamically later if needed)
     agent, docs_tools, diagram_tools, github_tools = initialize_agent()
     
     if not agent:
@@ -113,7 +105,7 @@ def create_api_app():
     
     api_adapter = FastAPIAdapter(task_service, aws_service, chat_service, aws_account_service)
     
-    logger.info("API server initialized successfully with AWS credentials")
+    logger.info("API server initialized successfully - AWS credentials can be set via UI")
     
     return api_adapter.app
 
