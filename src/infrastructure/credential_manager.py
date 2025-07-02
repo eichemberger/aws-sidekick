@@ -27,12 +27,20 @@ class InMemoryCredentialManager:
         self._dev_mode = self._is_dev_mode()
         self._dev_storage_path = Path.home() / ".aws-agent-dev" / "credentials.json"
         
+        # Log environment details for debugging
+        env = os.getenv("ENVIRONMENT", "development")
+        debug = os.getenv("DEBUG", "false")
+        persist_creds = os.getenv("PERSIST_CREDENTIALS", "false")
+        self.logger.info(f"Credential manager initializing: ENVIRONMENT={env}, DEBUG={debug}, PERSIST_CREDENTIALS={persist_creds}, dev_mode={self._dev_mode}")
+        
         if self._dev_mode:
-            self.logger.info("Development mode detected - credentials will persist across restarts")
-            self.logger.warning("DEV MODE: Credentials stored in plain text for convenience only!")
+            self.logger.info("Development mode or credential persistence enabled - credentials will persist across restarts")
+            self.logger.warning("CREDENTIAL PERSISTENCE: Credentials stored in plain text for convenience only!")
+            self.logger.info(f"Dev storage path: {self._dev_storage_path}")
             self._dev_initialized = False
         else:
             self.logger.info("Production mode - credentials will NOT persist across restarts")
+            self.logger.info("To enable persistence: set ENVIRONMENT=development or PERSIST_CREDENTIALS=true")
             self._dev_initialized = True
     
     async def store_credentials(self, alias: str, credentials: AWSCredentials) -> None:
@@ -104,7 +112,8 @@ class InMemoryCredentialManager:
             from infrastructure.config import get_config
             config = get_config()
             return config.debug or config.environment.lower() in ["development", "dev", "local"]
-        except Exception:
+        except Exception as e:
+            self.logger.warning(f"Failed to get config, falling back to environment variables: {e}")
             # Fallback to environment variables
             env = os.getenv("ENVIRONMENT", "development").lower()
             debug = os.getenv("DEBUG", "false").lower() in ["true", "1", "yes"]

@@ -80,25 +80,95 @@
     <div class="flex-1 flex flex-col bg-white dark:bg-gray-900">
       <router-view />
     </div>
+
+    <!-- Global Credentials Error Modal -->
+    <div 
+      v-if="awsAccountsStore.showCredentialsErrorModal" 
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" 
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="credentials-error-title"
+      aria-describedby="credentials-error-description"
+      @click="closeCredentialsError"
+    >
+      <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md mx-4 shadow-xl" @click.stop>
+        <div class="flex items-start">
+          <div class="flex-shrink-0">
+            <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-7.938 4h15.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.082 16.5c-.77.833.19 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <div class="ml-3 flex-1">
+            <h3 id="credentials-error-title" class="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              Credentials Required
+            </h3>
+            <p id="credentials-error-description" class="text-sm text-gray-600 dark:text-gray-300 mb-4">
+              The account <strong>"{{ awsAccountsStore.credentialsErrorAccount }}"</strong> doesn't have valid credentials set up. 
+              Please upload your AWS credentials to access this account.
+            </p>
+            <div class="flex flex-col sm:flex-row gap-3">
+              <button
+                ref="primaryActionButton"
+                @click="navigateToAwsSettings"
+                class="flex-1 inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Go to AWS Settings
+              </button>
+              <button
+                @click="closeCredentialsError"
+                class="flex-1 inline-flex justify-center items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
 import { useThemeStore } from '@/stores/theme'
+import { useAwsAccountsStore } from '@/stores/awsAccounts'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 
 const router = useRouter()
 const route = useRoute()
 const chatStore = useChatStore()
 const themeStore = useThemeStore()
+const awsAccountsStore = useAwsAccountsStore()
+
+// Template refs
+const primaryActionButton = ref<HTMLButtonElement>()
+
+// Watch for modal state changes to manage focus
+watch(() => awsAccountsStore.showCredentialsErrorModal, async (isOpen) => {
+  if (isOpen) {
+    await nextTick()
+    primaryActionButton.value?.focus()
+  }
+})
 
 // Initialize stores on app mount
 onMounted(async () => {
   await chatStore.initializeChat()
   themeStore.initializeTheme()
+  
+  // Add keyboard event listener
+  document.addEventListener('keydown', handleGlobalKeydown)
+})
+
+onUnmounted(() => {
+  // Remove keyboard event listener
+  document.removeEventListener('keydown', handleGlobalKeydown)
 })
 
 const createNewChat = async () => {
@@ -134,5 +204,22 @@ const deleteChat = async (conversationId: string) => {
 // Check if a conversation is the currently active one based on URL
 const isCurrentChat = (conversationId: string) => {
   return route.params.id === conversationId
+}
+
+// Global keyboard handler
+const handleGlobalKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && awsAccountsStore.showCredentialsErrorModal) {
+    closeCredentialsError()
+  }
+}
+
+// Credentials error modal methods
+const closeCredentialsError = () => {
+  awsAccountsStore.closeCredentialsErrorModal()
+}
+
+const navigateToAwsSettings = async () => {
+  closeCredentialsError()
+  await router.push('/aws')
 }
 </script> 

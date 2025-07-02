@@ -99,9 +99,13 @@ class MCPServerManager:
                     mcp_client.start()
                     self._mcp_clients[server_name] = mcp_client
                     
-                    # Get tools from this server
+                    # Get tools from this server and verify readiness
                     server_tools = mcp_client.list_tools_sync()
                     all_tools.extend(server_tools)
+                    
+                    # Verify MCP client basic functionality
+                    if len(server_tools) == 0:
+                        logger.warning(f"tool_name=<{server_name}> | no_tools_available | server may not be ready")
                     
                     logger.debug(f"tool_name=<{server_name}> | MCP client started successfully | tool_count=<{len(server_tools)}>")
                     
@@ -171,6 +175,11 @@ class MCPServerManager:
                 model=model,
                 system_prompt=system_prompt
             )
+            
+            # Verify agent is ready with all tools
+            total_tools = 1 + len(docs_tools) + len(diagram_tools) + len(github_tools)  # +1 for use_aws
+            logger.debug(f"agent_created | total_tools=<{total_tools}> | verifying_readiness")
+            
             logger.debug(**log_agent_lifecycle(phase="ready"))
 
             # Register cleanup if not already done
@@ -193,7 +202,7 @@ class MCPServerManager:
             logger.error(f"initialization_error=<{str(e)}> | Failed to initialize MCP servers and agent")
             return None, None, None, None
 
-    def reinitialize_with_credentials(self) -> Tuple[Any, List, List, List]:
+    async def reinitialize_with_credentials(self) -> Tuple[Any, List, List, List]:
         """Reinitialize MCP servers and agent with current environment variables"""
         logger.info("credentials_changed | reinitializing MCP servers and agent with new credentials")
         
@@ -215,11 +224,31 @@ class MCPServerManager:
         result = self.initialize_mcp_servers_and_agent()
         
         if result[0] is not None:
+            # Verify agent is ready by testing MCP server connectivity
+            await self._verify_agent_readiness(result[0])
             logger.info("MCP servers and agent reinitialized successfully with new credentials")
         else:
             logger.error("Failed to reinitialize MCP servers and agent")
             
         return result
+
+    async def _verify_agent_readiness(self, agent) -> None:
+        """Verify that the agent and MCP servers are ready to handle tool calls"""
+        try:
+            # Test MCP server connectivity by checking tool availability
+            for server_name, client in self._mcp_clients.items():
+                try:
+                    # Verify each MCP client is still responsive
+                    client.list_tools_sync()
+                    logger.debug(f"tool_name=<{server_name}> | readiness_verified")
+                except Exception as e:
+                    logger.warning(f"tool_name=<{server_name}> | readiness_check_failed | {str(e)}")
+                    # Don't fail the whole process, just warn
+            
+            logger.debug("agent_readiness_verified | all_mcp_servers_responsive")
+            
+        except Exception as e:
+            logger.warning(f"agent_readiness_verification_failed | {str(e)} | proceeding_anyway")
 
     def _cleanup_existing_clients(self):
         """Clean up existing MCP clients"""

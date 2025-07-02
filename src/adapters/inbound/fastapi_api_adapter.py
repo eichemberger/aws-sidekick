@@ -249,36 +249,37 @@ class FastAPIAdapter:
                         detail="No AWS account selected. Please select an AWS account before sending messages."
                     )
                 
-                # CRITICAL: Switch to the correct account credentials BEFORE processing
+                # CRITICAL: Ensure correct account credentials are loaded
                 logger = get_logger(__name__)
                 logger.info(f"Ensuring credentials loaded for account: {account_alias}")
                 
-                # Debug: Check environment BEFORE switching
-                import os
-                logger.info(f"BEFORE switch - AWS_ACCESS_KEY_ID: {'***' if os.environ.get('AWS_ACCESS_KEY_ID') else 'NOT_SET'}")
-                logger.info(f"BEFORE switch - AWS_PROFILE: {os.environ.get('AWS_PROFILE', 'NOT_SET')}")
-                logger.info(f"BEFORE switch - AWS_DEFAULT_REGION: {os.environ.get('AWS_DEFAULT_REGION', 'NOT_SET')}")
+                # Check if we need to switch accounts (only switch if different from current active account)
+                current_active = self._aws_service.get_active_account_alias()
                 
                 try:
-                    await self._aws_service.set_active_account(account_alias)
-                    logger.info("Credentials switched successfully")
-                    
-                    # Debug: Check environment AFTER switching
-                    logger.info(f"AFTER switch - AWS_ACCESS_KEY_ID: {'***' if os.environ.get('AWS_ACCESS_KEY_ID') else 'NOT_SET'}")
-                    logger.info(f"AFTER switch - AWS_PROFILE: {os.environ.get('AWS_PROFILE', 'NOT_SET')}")
-                    logger.info(f"AFTER switch - AWS_DEFAULT_REGION: {os.environ.get('AWS_DEFAULT_REGION', 'NOT_SET')}")
+                    if current_active != account_alias:
+                        # Only switch accounts if different - this triggers MCP reinitialization
+                        logger.info(f"Switching from account '{current_active}' to '{account_alias}'")
+                        await self._aws_service.set_active_account(account_alias)
+                        logger.info("Account switched successfully with MCP reinitialization")
+                    else:
+                        # Same account - just validate credentials are available without MCP reinitialization
+                        logger.info(f"Already using account '{account_alias}' - validating credentials")
+                        # Try to get account info to ensure credentials are still valid
+                        await self._aws_service.get_account_info(account_alias)
+                        logger.info("Credentials validated successfully")
                     
                 except ValueError as e:
-                    logger.error(f"Failed to switch to account '{account_alias}': {e}")
+                    logger.error(f"Failed to load credentials for account '{account_alias}': {e}")
                     raise HTTPException(
                         status_code=400, 
                         detail=f"Failed to load credentials for account '{account_alias}'. Please re-enter credentials via the UI."
                     )
                 except Exception as e:
-                    logger.error(f"Unexpected error switching to account '{account_alias}': {e}")
+                    logger.error(f"Unexpected error with account '{account_alias}': {e}")
                     raise HTTPException(
                         status_code=500, 
-                        detail="Failed to switch AWS account credentials"
+                        detail="Failed to access AWS account credentials"
                     )
                 
                 # Get or create conversation

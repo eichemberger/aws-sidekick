@@ -9,6 +9,10 @@ export const useAwsAccountsStore = defineStore('awsAccounts', () => {
   const defaultAccount = ref<AWSAccount | null>(null)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+  
+  // Credentials error modal state
+  const showCredentialsErrorModal = ref(false)
+  const credentialsErrorAccount = ref<string>('')
 
   // Computed properties
   const activeAccount = computed(() => 
@@ -187,6 +191,13 @@ export const useAwsAccountsStore = defineStore('awsAccounts', () => {
     } catch (err) {
       console.error('Failed to set active account:', err)
       error.value = err instanceof Error ? err.message : 'Failed to set active account'
+      
+      // Check if this is a credentials error and show modal
+      if (err instanceof Error && err.message.includes('No credentials available')) {
+        credentialsErrorAccount.value = alias
+        showCredentialsErrorModal.value = true
+      }
+      
       throw err
     } finally {
       isLoading.value = false
@@ -234,6 +245,11 @@ export const useAwsAccountsStore = defineStore('awsAccounts', () => {
     error.value = null
   }
 
+  const closeCredentialsErrorModal = () => {
+    showCredentialsErrorModal.value = false
+    credentialsErrorAccount.value = ''
+  }
+
   // Initialize on store creation
   const initialize = async () => {
     try {
@@ -254,6 +270,8 @@ export const useAwsAccountsStore = defineStore('awsAccounts', () => {
     defaultAccount,
     isLoading,
     error,
+    showCredentialsErrorModal,
+    credentialsErrorAccount,
 
     // Computed
     activeAccount,
@@ -272,6 +290,7 @@ export const useAwsAccountsStore = defineStore('awsAccounts', () => {
     validateAccountCredentials,
     getAccount,
     clearError,
+    closeCredentialsErrorModal,
     reset,
     initialize
   }

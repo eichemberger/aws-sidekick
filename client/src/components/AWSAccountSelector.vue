@@ -36,44 +36,22 @@
         v-show="isDropdownOpen"
         class="dropdown-content menu p-2 shadow-lg bg-white dark:bg-gray-800 rounded-lg w-80 border border-gray-200 dark:border-gray-700"
       >
-        <!-- Current Active Account -->
-        <li v-if="activeAccount" class="mb-2">
-                     <div class="bg-blue-50 dark:bg-blue-900/10 rounded-lg p-3">
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="font-medium text-primary flex items-center gap-2">
-                  <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                  </svg>
-                  {{ activeAccount.alias }}
-                  <span class="badge badge-success badge-xs">Active</span>
-                </div>
-                <div class="text-sm text-secondary">{{ activeAccount.description || 'No description' }}</div>
-                <div class="text-xs text-secondary mt-1">
-                  {{ activeAccount.region }} 
-                  <span v-if="activeAccount.account_id">• {{ activeAccount.account_id }}</span>
-                </div>
-              </div>
-              <button
-                @click.stop="clearActiveAccount"
-                class="btn btn-xs btn-ghost text-secondary hover:text-red-600"
-                title="Clear active account"
-              >
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+        <!-- Header -->
+        <li class="px-3 py-2 text-xs font-medium text-secondary border-b border-gray-200 dark:border-gray-700 mb-2">
+          {{ hasAccounts ? 'Select AWS Account' : 'AWS Accounts' }}
+        </li>
+
+        <!-- Loading State -->
+        <li v-if="isLoading" class="p-3">
+          <div class="flex items-center justify-center">
+            <div class="w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+            <span class="ml-2 text-sm text-secondary">Loading accounts...</span>
           </div>
         </li>
 
-        <!-- Account List -->
-        <li v-if="sortedAccounts.length > 0" class="menu-title mb-2">
-          <span>Switch Account</span>
-        </li>
-        
+        <!-- Accounts List -->
         <li 
-          v-for="account in availableAccounts" 
+          v-for="account in sortedAccounts" 
           :key="account.alias"
           class="mb-1"
         >
@@ -115,13 +93,32 @@
         </li>
 
         <!-- Divider -->
-        <li class="border-t border-gray-200 dark:border-gray-700 mt-2 pt-2">
-          <router-link @click="closeDropdown" to="/aws" class="p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+        <li v-if="hasAccounts" class="border-t border-gray-200 dark:border-gray-700 my-2"></li>
+
+        <!-- Actions -->
+        <li v-if="hasAccounts">
+          <a 
+            @click="clearActiveAccount" 
+            class="p-3 text-sm text-secondary hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer rounded-lg flex items-center gap-2"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Clear Selection
+          </a>
+        </li>
+
+        <li>
+          <router-link 
+            to="/aws" 
+            @click="closeDropdown"
+            class="p-3 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer rounded-lg flex items-center gap-2"
+          >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            Manage Accounts
+            Manage AWS Accounts
           </router-link>
         </li>
       </ul>
@@ -130,9 +127,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, onUnmounted } from 'vue'
-import { useAwsAccountsStore } from '@/stores/awsAccounts'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useAwsAccountsStore } from '@/stores/awsAccounts'
 
 // Store
 const accountsStore = useAwsAccountsStore()
@@ -147,17 +144,11 @@ const {
 } = storeToRefs(accountsStore)
 
 // Local state
-const isDropdownOpen = ref(false)
 const dropdownContainer = ref<HTMLElement>()
+const isDropdownOpen = ref(false)
 
 // Computed
-const availableAccounts = computed(() => 
-  sortedAccounts.value.filter(account => account.alias !== activeAccountAlias.value)
-)
-
-const isDisabled = computed(() => 
-  Boolean(error.value && error.value.includes('404'))
-)
+const isDisabled = computed(() => !hasAccounts.value && !isLoading.value)
 
 // Methods
 const toggleDropdown = () => {
@@ -175,6 +166,8 @@ const selectAccount = async (alias: string) => {
     closeDropdown()
   } catch (err) {
     console.error('Failed to set active account:', err)
+    // Error handling is now done in the store
+    closeDropdown()
   }
 }
 
@@ -244,20 +237,12 @@ onUnmounted(() => {
   @apply border border-gray-300 dark:border-gray-600 bg-transparent text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white hover:border-gray-400 dark:hover:border-gray-500;
 }
 
-.btn-ghost {
-  @apply bg-transparent hover:bg-gray-100 dark:hover:bg-gray-700;
-}
-
-.btn-xs {
-  @apply px-1 py-0.5 text-xs;
-}
-
 .dropdown {
   @apply relative;
 }
 
 .dropdown-content {
-  @apply absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-10;
+  @apply absolute left-0 bottom-full mb-2 z-50;
 }
 
 .menu {
@@ -265,19 +250,11 @@ onUnmounted(() => {
 }
 
 .menu li a {
-  @apply block px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer rounded-lg;
-}
-
-.menu-title {
-  @apply px-3 py-1 text-xs font-semibold text-secondary uppercase tracking-wider;
+  @apply block;
 }
 
 .badge {
-  @apply inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium;
-}
-
-.badge-success {
-  @apply bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300;
+  @apply inline-flex items-center px-2 py-1 rounded-full text-xs font-medium;
 }
 
 .badge-warning {
@@ -293,18 +270,10 @@ onUnmounted(() => {
 }
 
 .badge-xs {
-  @apply px-1 py-0 text-xs;
+  @apply px-1.5 py-0.5 text-xs;
 }
 
-.loading {
-  @apply animate-spin;
-}
-
-.loading-spinner {
-  @apply w-4 h-4 border-2 border-current border-t-transparent rounded-full;
-}
-
-.loading-sm {
-  @apply w-3 h-3;
+.text-secondary {
+  @apply text-gray-600 dark:text-gray-400;
 }
 </style> 

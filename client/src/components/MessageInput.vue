@@ -1,8 +1,8 @@
 <template>
-  <div class="border-t border-gray-200 dark:border-gray-700/50 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm p-6">
+  <div class="border-t border-gray-200 dark:border-gray-700/50 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm p-3">
     <div class="max-w-4xl mx-auto">
       <!-- Chat Info Row -->
-      <div v-if="isInitialized" class="flex justify-between items-center mb-4">
+      <div v-if="isInitialized" class="flex justify-between items-center mb-2">
         <div class="text-sm text-secondary">
           <span v-if="currentConversation" class="font-medium">{{ currentConversation.title }}</span>
           <span v-else-if="conversationCount > 0" class="font-medium">{{ conversationCount }} conversation(s)</span>
@@ -18,7 +18,7 @@
           @keydown="handleKeydown"
           @input="adjustTextareaHeight"
           :placeholder="disabled ? 'Processing...' : !canSendMessage ? 'Please select an AWS account to start chatting...' : 'Ask me anything about your AWS infrastructure...'"
-          class="w-full bg-gray-50/50 dark:bg-gray-800/50 border border-gray-300/50 dark:border-gray-600/50 rounded-2xl px-6 py-4 pr-14 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-200"
+          class="w-full bg-gray-50/50 dark:bg-gray-800/50 border border-gray-300/50 dark:border-gray-600/50 rounded-2xl px-6 py-4 pr-14 text-sm leading-5 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-200"
           :class="{ 
             'opacity-60 cursor-not-allowed': disabled || !canSendMessage
           }"
@@ -30,7 +30,7 @@
         <button
           @click="sendMessage"
           :disabled="!inputMessage.trim() || disabled || !canSendMessage"
-          class="absolute right-3 bottom-3 p-2.5 rounded-xl transition-all duration-200 shadow-lg"
+          class="absolute right-2 bottom-2 p-2 rounded-xl transition-all duration-200 shadow-lg"
           :class="inputMessage.trim() && !disabled && canSendMessage
             ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-blue-500/25' 
             : 'text-gray-400 dark:text-gray-500 cursor-not-allowed bg-gray-200 dark:bg-gray-700/50'"
@@ -43,7 +43,7 @@
       </div>
       
       <!-- Footer -->
-      <div class="text-center text-xs text-muted mt-4">
+      <div class="text-center text-xs text-muted mt-3">
         <span class="inline-flex items-center gap-1">
           <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
             <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>

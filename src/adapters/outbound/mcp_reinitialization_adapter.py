@@ -28,7 +28,7 @@ class MCPReinitializationAdapter(MCPReinitializationPort):
             raise RuntimeError("Dependency injection container not set")
         
         try:
-            self._container.reinitialize_agent_with_new_credentials()
+            await self._container.reinitialize_agent_with_new_credentials()
             logger.info("mcp_servers_reinitialized | credentials_propagated_to_tools")
         except Exception as e:
             logger.warning(f"mcp_reinitialization_failed | error=<{str(e)}> | credentials may not be available to all tools")

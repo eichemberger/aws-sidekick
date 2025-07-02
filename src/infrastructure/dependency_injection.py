@@ -57,7 +57,7 @@ class DependencyContainer:
         self._mcp_manager._diagram_tools = diagram_tools
         self._mcp_manager._github_tools = github_tools
 
-    def reinitialize_agent_with_new_credentials(self):
+    async def reinitialize_agent_with_new_credentials(self):
         """Reinitialize agent and MCP servers with updated credentials"""
         from infrastructure.logging import get_logger
         logger = get_logger(__name__)
@@ -76,7 +76,7 @@ class DependencyContainer:
         
         # Reinitialize MCP servers and agent
         logger.info("Calling MCP manager to reinitialize with credentials")
-        agent, docs_tools, diagram_tools, github_tools = self._mcp_manager.reinitialize_with_credentials()
+        agent, docs_tools, diagram_tools, github_tools = await self._mcp_manager.reinitialize_with_credentials()
         
         # Update configuration
         self.configure_agent(agent, docs_tools, diagram_tools, github_tools)

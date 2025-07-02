@@ -19,7 +19,7 @@
       </div>
       
       <!-- Simple Scrollable Messages -->
-      <div v-else-if="displayMessages.length > 0" class="h-full overflow-y-auto custom-scrollbar">
+      <div v-else-if="displayMessages.length > 0" ref="messagesContainer" class="h-full overflow-y-auto custom-scrollbar">
         <div class="max-w-4xl mx-auto py-4">
           <div
             v-for="(message, index) in displayMessages"
@@ -30,21 +30,19 @@
             <div v-if="message.role === 'user'" class="flex gap-3 items-start justify-end">
               <!-- Message Bubble -->
               <div class="flex-shrink-0 max-w-3xl">
-                <div class="group rounded-lg px-4 py-3 bg-blue-600 text-white">
-                  <div class="markdown-content" v-html="formatMessage(message.content)"></div>
+                <div class="group relative rounded-lg px-4 py-3 bg-blue-600 text-white">
+                  <div class="markdown-content pr-8" v-html="formatMessage(message.content)"></div>
                   
-                  <!-- Actions -->
-                  <div class="opacity-0 group-hover:opacity-100 transition-opacity duration-200 mt-1">
-                    <button
-                      @click="copyMessage(message.content)"
-                      class="p-1 rounded hover:bg-black/10 transition-colors"
-                      title="Copy message"
-                    >
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                      </svg>
-                    </button>
-                  </div>
+                  <!-- Copy Button - Top Right Corner -->
+                  <button
+                    @click="copyMessage(message.content)"
+                    class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded hover:bg-black/10"
+                    title="Copy message"
+                  >
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                    </svg>
+                  </button>
                 </div>
               </div>
               
@@ -67,21 +65,19 @@
               
               <!-- Message Bubble -->
               <div class="flex-shrink-0 max-w-3xl">
-                <div class="group rounded-lg px-4 py-3 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white">
-                  <div class="markdown-content" v-html="formatMessage(message.content)"></div>
+                <div class="group relative rounded-lg px-4 py-3 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white">
+                  <div class="markdown-content pr-8" v-html="formatMessage(message.content)"></div>
                   
-                  <!-- Actions -->
-                  <div class="opacity-0 group-hover:opacity-100 transition-opacity duration-200 mt-1">
-                    <button
-                      @click="copyMessage(message.content)"
-                      class="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-                      title="Copy message"
-                    >
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                      </svg>
-                    </button>
-                  </div>
+                  <!-- Copy Button - Top Right Corner -->
+                  <button
+                    @click="copyMessage(message.content)"
+                    class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded hover:bg-black/10 dark:hover:bg-white/10"
+                    title="Copy message"
+                  >
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                    </svg>
+                  </button>
                 </div>
               </div>
             </div>
@@ -154,6 +150,7 @@ const tasksStore = useTasksStore()
 const awsAccountsStore = useAwsAccountsStore()
 
 const messageInputRef = ref()
+const messagesContainer = ref<HTMLElement>()
 
 // Use chat store directly instead of local state
 const messages = computed(() => chatStore.messages)
@@ -221,12 +218,11 @@ const handleSendMessage = async (messageToSend: string) => {
 
   // Scroll to show the user's message immediately
   await nextTick()
-  scrollToBottom()
+  scrollToBottom() // Immediate scroll for user messages
 
   try {
     await chatStore.sendMessage(messageToSend)
-    await nextTick()
-    scrollToBottom()
+    // Bot message auto-scroll is now handled by the watcher
   } catch (error) {
     console.error('Failed to send message:', error)
     // Remove the optimistically added message if there was an error
@@ -245,10 +241,12 @@ const copyMessage = async (content: string) => {
   }
 }
 
-const scrollToBottom = () => {
-  const container = document.querySelector('.overflow-y-auto')
-  if (container) {
-    container.scrollTop = container.scrollHeight
+const scrollToBottom = (smooth = false) => {
+  if (messagesContainer.value) {
+    messagesContainer.value.scrollTo({
+      top: messagesContainer.value.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto'
+    })
   }
 }
 
@@ -325,8 +323,21 @@ onMounted(async () => {
   await handleRouteChange()
 })
 
+// Track last message for onUpdated fallback
+const lastMessageId = ref<string | null>(null)
+
 onUpdated(() => {
-  scrollToBottom()
+  // Only scroll if we have a new bot message as fallback
+  if (displayMessages.value.length > 0) {
+    const lastMessage = displayMessages.value[displayMessages.value.length - 1]
+    if (lastMessage && 
+        lastMessage.role === 'assistant' && 
+        lastMessage.id !== 'loading-message' &&
+        lastMessage.id !== lastMessageId.value) {
+      lastMessageId.value = lastMessage.id
+      scrollToBottom(true)
+    }
+  }
 })
 
 onUnmounted(() => {
@@ -339,6 +350,31 @@ watch(() => route.params.id, async (newId, oldId) => {
     await handleRouteChange()
   }
 }, { immediate: false })
+
+// Watch for new bot messages and auto-scroll
+watch(displayMessages, (newMessages, oldMessages) => {
+  if (newMessages.length > oldMessages.length) {
+    const lastMessage = newMessages[newMessages.length - 1]
+    // Auto-scroll when bot (assistant) replies (ignore loading message)
+    if (lastMessage && lastMessage.role === 'assistant' && lastMessage.id !== 'loading-message') {
+      nextTick(() => {
+        // Small delay to ensure the message is fully rendered
+        setTimeout(() => {
+          scrollToBottom(true) // Use smooth scrolling for bot replies
+        }, 150)
+      })
+    }
+  }
+}, { deep: true })
+
+// Also watch for when messages container becomes available
+watch(messagesContainer, (container) => {
+  if (container && displayMessages.value.length > 0) {
+    nextTick(() => {
+      scrollToBottom(false) // Immediate scroll when container becomes available
+    })
+  }
+})
 
 const handleRouteChange = async () => {
   await chatStore.initializeChat()
@@ -356,7 +392,7 @@ const handleRouteChange = async () => {
   }
   
   await nextTick()
-  scrollToBottom()
+  scrollToBottom() // Immediate scroll for initial loading
 }
 </script>
 
@@ -591,6 +627,37 @@ const handleRouteChange = async () => {
 
 .bg-blue-600 .markdown-content :deep(.aws-table th) {
   background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Custom scrollbar for chat container */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.4) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.4);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.6);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(75, 85, 99, 0.4);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(75, 85, 99, 0.6);
 }
 
 /* Custom scrollbar for virtual list */

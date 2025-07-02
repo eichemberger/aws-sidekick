@@ -21,8 +21,8 @@ class AgentRepositoryAdapter(AgentRepositoryPort):
         self._agent_semaphore = asyncio.Semaphore(15)  # Increased from 5 to 15
         self._chat_semaphore = asyncio.Semaphore(10)   # Separate semaphore for chat operations
         self._default_timeout = 120.0  # 2 minutes default timeout
-        self._chat_timeout = 45.0  # Increased from 30 to 45 seconds for chat reliability
-        self._retry_max_attempts = 2
+        self._chat_timeout = 60.0  # Increased from 30 to 60 seconds for chat reliability
+        self._retry_max_attempts = 3
         
         if not self._available:
             logger.warning("agent=<unavailable> | Agent repository initialized but agent is not available | This usually means the API key is missing or invalid")
@@ -97,8 +97,16 @@ class AgentRepositoryAdapter(AgentRepositoryPort):
                 if attempt < max_attempts - 1:
                     # Only retry on specific errors
                     if self._is_retriable_error(e):
-                        wait_time = 2 ** attempt
-                        logger.warning(f"attempt=<{attempt + 1}/{max_attempts}> | wait_time=<{wait_time}s> | error=<{str(e)}> | agent operation failed, retrying")
+                        error_msg = str(e).lower()
+                        
+                        # Use shorter delays for tool initialization errors
+                        if ("failed to process tool" in error_msg or "tool_use" in error_msg):
+                            wait_time = min(0.5 * (2 ** attempt), 2.0)  # Max 2 seconds for tool errors
+                            logger.info(f"attempt=<{attempt + 1}/{max_attempts}> | wait_time=<{wait_time}s> | tool_initialization_error | retrying")
+                        else:
+                            wait_time = 2 ** attempt  # Normal exponential backoff
+                            logger.warning(f"attempt=<{attempt + 1}/{max_attempts}> | wait_time=<{wait_time}s> | error=<{str(e)}> | agent operation failed, retrying")
+                        
                         await asyncio.sleep(wait_time)
                         continue
                 
@@ -115,11 +123,19 @@ class AgentRepositoryAdapter(AgentRepositoryPort):
             "service unavailable",
             "too many requests",
             "connection",
-            "network"
+            "network",
+            "failed to process tool",  # MCP tool initialization errors
+            "invalid_request_error",   # Tool validation errors that might resolve
+            "tool_use"                 # Tool execution errors that might be timing-related
         ]
         
         error_message = str(error).lower()
-        return any(retriable_msg in error_message for retriable_msg in retriable_errors)
+        is_retriable = any(retriable_msg in error_message for retriable_msg in retriable_errors)
+        
+        if is_retriable and ("failed to process tool" in error_message or "tool_use" in error_message):
+            logger.debug(f"tool_initialization_error_detected | will_retry | error=<{error_message[:100]}>")
+        
+        return is_retriable
     
     def _extract_response_content(self, response) -> str:
         """Extract content from different AI model response formats"""
@@ -206,8 +222,14 @@ class AgentRepositoryAdapter(AgentRepositoryPort):
                         # Handle tool execution errors gracefully
                         error_msg = str(tool_error)
                         logger.warning(f"tool_error=<{error_msg[:100]}> | tool execution error occurred")
-                        if "invalid_request_error" in error_msg and "tool_use" in error_msg:
-                            return f"Tool execution failed: {error_msg}. This may be due to missing AWS credentials or configuration issues. Please check your AWS setup."
+                        
+                        # Check if this is a recoverable tool initialization error
+                        if ("failed to process tool" in error_msg or 
+                            "invalid_request_error" in error_msg or
+                            "connection" in error_msg.lower()):
+                            # This might be a race condition - let the retry mechanism handle it
+                            logger.info("tool_error_may_be_recoverable | will_retry_if_attempts_remaining")
+                            raise tool_error
                         elif "BadRequestError" in error_msg:
                             return f"Request error: {error_msg}. Please check your input and try again."
                         else:
