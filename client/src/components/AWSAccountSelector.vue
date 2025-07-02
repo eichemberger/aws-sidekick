@@ -6,10 +6,11 @@
         @click="toggleDropdown"
         class="btn btn-sm btn-outline gap-2"
         :class="{ 
-          'opacity-50 cursor-not-allowed': isDisabled,
-          'opacity-75': isLoading 
+          'opacity-75': isLoading,
+          'border-orange-300 dark:border-orange-600 text-orange-600 dark:text-orange-400': !hasAccounts && !isLoading
         }"
-        :disabled="isDisabled || isLoading"
+        :disabled="isLoading"
+        :title="!hasAccounts && !isLoading ? 'Click to add AWS accounts' : ''"
       >
         <!-- Loading spinner when switching -->
         <div v-if="isLoading" class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
@@ -19,6 +20,7 @@
         </svg>
         <span v-if="activeAccount" class="max-w-24 truncate">{{ activeAccount.alias }}</span>
         <span v-else-if="error && error.includes('404')" class="text-secondary">N/A</span>
+        <span v-else-if="!hasAccounts" class="text-orange-600 dark:text-orange-400">Add Account</span>
         <span v-else class="text-secondary">No Account</span>
         <svg 
           class="w-4 h-4 transition-transform" 
@@ -82,13 +84,16 @@
         </li>
 
         <!-- Empty State -->
-        <li v-if="!hasAccounts" class="p-3">
-          <div class="text-center text-secondary">
-            <svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2V7zm0 0V5a2 2 0 012-2h6l2 2h6a2 2 0 012 2v2M7 13h10" />
+        <li v-if="!hasAccounts" class="p-4">
+          <div class="text-center">
+            <svg class="w-10 h-10 mx-auto mb-3 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p v-if="error && error.includes('404')" class="text-sm">Multi-account features not available</p>
-            <p v-else class="text-sm">No AWS accounts registered</p>
+            <p v-if="error && error.includes('404')" class="text-sm text-secondary mb-3">Multi-account features not available</p>
+            <div v-else>
+              <p class="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">No AWS accounts configured</p>
+              <p class="text-xs text-secondary mb-3">Add an AWS account to get started</p>
+            </div>
           </div>
         </li>
 
@@ -112,13 +117,16 @@
           <router-link 
             to="/aws" 
             @click="closeDropdown"
-            class="p-3 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer rounded-lg flex items-center gap-2"
+            class="p-3 text-sm cursor-pointer rounded-lg flex items-center gap-2"
+            :class="hasAccounts 
+              ? 'text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20' 
+              : 'text-white bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700 font-medium'"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path v-if="hasAccounts" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
-            Manage AWS Accounts
+            {{ hasAccounts ? 'Manage AWS Accounts' : 'Add AWS Account' }}
           </router-link>
         </li>
       </ul>
@@ -127,7 +135,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useAwsAccountsStore } from '@/stores/awsAccounts'
 
@@ -147,12 +155,11 @@ const {
 const dropdownContainer = ref<HTMLElement>()
 const isDropdownOpen = ref(false)
 
-// Computed
-const isDisabled = computed(() => !hasAccounts.value && !isLoading.value)
+// Computed (removed isDisabled since dropdown is now always accessible)
 
 // Methods
 const toggleDropdown = () => {
-  if (isDisabled.value) return
+  if (isLoading.value) return
   isDropdownOpen.value = !isDropdownOpen.value
 }
 
