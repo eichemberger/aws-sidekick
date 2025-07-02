@@ -20,8 +20,8 @@ class AgentRepositoryAdapter(AgentRepositoryPort):
         # Connection management - Increased concurrency for better responsiveness
         self._agent_semaphore = asyncio.Semaphore(15)  # Increased from 5 to 15
         self._chat_semaphore = asyncio.Semaphore(10)   # Separate semaphore for chat operations
-        self._default_timeout = 120.0  # 2 minutes default timeout
-        self._chat_timeout = 60.0  # Increased from 30 to 60 seconds for chat reliability
+        self._default_timeout = 180.0  # 3 minutes default timeout (increased from 120s)
+        self._chat_timeout = 180.0  # 3 minutes for chat reliability (increased from 60s)
         self._retry_max_attempts = 3
         
         if not self._available:

@@ -23,7 +23,6 @@ class ApiService {
   constructor() {
     this.client = axios.create({
       baseURL: import.meta.env.VITE_API_URL || '/api',
-      timeout: 45000, // Reduced from 60s to 45s for faster failures
       headers: {
         'Content-Type': 'application/json'
       }
@@ -76,9 +75,7 @@ class ApiService {
 
   // Chat endpoints
   async sendChatMessage(request: ChatRequest): Promise<ChatResponse> {
-    const response = await this.client.post<ChatResponse>('/chat', request, {
-      timeout: 35000 // 35 seconds for chat - shorter than other operations
-    })
+    const response = await this.client.post<ChatResponse>('/chat', request)
     return response.data
   }
 

@@ -69,7 +69,7 @@ class AWSClientAdapter(AWSClientPort):
                         asyncio.get_event_loop().run_in_executor(
                             None, operation_func, *args, **kwargs
                         ),
-                        timeout=60.0  # 60 second timeout
+                        timeout=180.0  # 3 minute timeout (increased from 60s)
                     )
             except (ClientError, BotoCoreError) as e:
                 error_code = getattr(e.response.get('Error', {}), 'Code', None) if hasattr(e, 'response') else None

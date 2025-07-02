@@ -14,7 +14,6 @@ from core.ports.inbound.task_service_port import TaskServicePort
 from core.ports.inbound.aws_service_port import AWSServicePort
 from core.ports.inbound.chat_service_port import ChatServicePort
 from core.ports.inbound.aws_account_service_port import AWSAccountServicePort
-# Removed TaskType import - simplified to just background task execution
 from core.domain.value_objects.aws_credentials import AWSCredentials
 from infrastructure.config import get_config
 from infrastructure.logging import get_logger
