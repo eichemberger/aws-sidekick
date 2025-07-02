@@ -8,7 +8,7 @@
       {{ statusText }}
     </span>
     <button
-      v-if="!awsStore.isConnected"
+      v-if="!isConnected"
       @click="connect"
       class="text-xs text-primary-600 hover:text-primary-700 font-medium"
     >
@@ -23,15 +23,17 @@ import { useAwsStore } from '@/stores/aws'
 
 const awsStore = useAwsStore()
 
+const isConnected = computed(() => awsStore.accountInfo !== null)
+
 const statusClass = computed(() => {
-  if (awsStore.isLoading) return 'bg-yellow-400 animate-pulse'
-  return awsStore.isConnected ? 'bg-green-400' : 'bg-gray-400'
+  if (awsStore.isAccountLoading) return 'bg-yellow-400 animate-pulse'
+  return isConnected.value ? 'bg-green-400' : 'bg-gray-400'
 })
 
 const statusText = computed(() => {
-  if (awsStore.isLoading) return 'Connecting...'
-  if (awsStore.isConnected && awsStore.accountId) {
-    return `AWS: ${awsStore.accountId.slice(-4)}`
+  if (awsStore.isAccountLoading) return 'Connecting...'
+  if (isConnected.value && awsStore.accountInfo?.account_id) {
+    return `AWS: ${awsStore.accountInfo.account_id.slice(-4)}`
   }
   return 'AWS Disconnected'
 })
@@ -42,7 +44,7 @@ const connect = async () => {
 
 onMounted(() => {
   // Try to connect to AWS on component mount
-  if (!awsStore.isConnected) {
+  if (!isConnected.value) {
     connect()
   }
 })

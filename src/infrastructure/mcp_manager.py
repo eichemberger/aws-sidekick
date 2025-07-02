@@ -82,9 +82,12 @@ class MCPServerManager:
                         server_env.update(server_config.env)  # Add server-specific vars
                     
                     # For GitHub server, ensure token is set
-                    if server_name == "github" and not config.github.is_available:
-                        logger.warning(f"tool_name=<{server_name}> | skipping | github_token not available")
-                        continue
+                    if server_name == "github":
+                        # Check both the config and the actual environment variable
+                        github_token = server_env.get('GITHUB_PERSONAL_ACCESS_TOKEN')
+                        if not config.github.is_available or not github_token or github_token.strip() == '':
+                            logger.warning(f"tool_name=<{server_name}> | skipping | github_token not available | config_available={config.github.is_available} | env_token_set={bool(github_token)}")
+                            continue
                     
                     # Debug: Log AWS environment being passed to this MCP server
                     logger.debug(f"tool_name=<{server_name}> | aws_access_key={'***' if server_env.get('AWS_ACCESS_KEY_ID') else 'NOT_SET'} | aws_profile={server_env.get('AWS_PROFILE', 'NOT_SET')} | aws_region={server_env.get('AWS_DEFAULT_REGION', 'NOT_SET')}")

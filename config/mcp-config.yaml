@@ -19,7 +19,7 @@ mcp_servers:
 
   # GitHub Integration (requires GITHUB_PERSONAL_ACCESS_TOKEN)
   github:
-    enabled: true
+    enabled: false
     command: npx
     args:
       - "@modelcontextprotocol/server-github"

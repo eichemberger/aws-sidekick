@@ -57,30 +57,13 @@ export interface AWSCredentialsRequest {
   profile?: string
 }
 
-export interface AWSCredentialsResponse {
-  region: string
-  profile?: string
-  has_access_key: boolean
-  has_session_token: boolean
-  is_valid: boolean
-}
-
-export interface AWSCredentialsValidation {
-  valid: boolean
-  error?: string
-  account_id?: string
-  region?: string
-  user_arn?: string
-}
-
-// Multi-Account AWS Management Types
 export interface AWSAccount {
   alias: string
-  account_id?: string
   description?: string
-  is_default: boolean
   region: string
+  account_id?: string
   uses_profile: boolean
+  is_default: boolean
   created_at: string
   updated_at: string
 }

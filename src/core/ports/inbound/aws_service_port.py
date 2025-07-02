@@ -50,25 +50,4 @@ class AWSServicePort(ABC):
     @abstractmethod
     async def optimize_resources(self, resource_type: ResourceType = None, account_alias: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get optimization recommendations for AWS resources"""
-        pass
-
-    # Legacy methods for backward compatibility
-    @abstractmethod
-    async def set_credentials(self, credentials: AWSCredentials) -> None:
-        """Set AWS credentials for current session (deprecated, use set_active_account)"""
-        pass
-
-    @abstractmethod
-    async def clear_credentials(self) -> None:
-        """Clear session AWS credentials (deprecated, use clear_active_account)"""
-        pass
-
-    @abstractmethod
-    def get_current_credentials(self) -> Optional[AWSCredentials]:
-        """Get current session credentials (deprecated, use get_active_account_alias)"""
-        pass
-
-    @abstractmethod
-    async def validate_credentials(self, credentials: AWSCredentials) -> bool:
-        """Validate AWS credentials (deprecated)"""
         pass 

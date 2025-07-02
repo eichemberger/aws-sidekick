@@ -74,6 +74,11 @@ class DependencyContainer:
             del self._instances['aws_analysis_use_case']
             logger.info("Cleared cached AWS analysis use case instance")
         
+        # Clear chat service as it depends on AWS services that depend on agent
+        if 'chat_service' in self._instances:
+            del self._instances['chat_service']
+            logger.info("Cleared cached chat service instance")
+        
         # Reinitialize MCP servers and agent
         logger.info("Calling MCP manager to reinitialize with credentials")
         agent, docs_tools, diagram_tools, github_tools = await self._mcp_manager.reinitialize_with_credentials()

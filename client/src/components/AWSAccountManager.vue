@@ -7,7 +7,7 @@
         <p class="text-secondary mt-1">Manage your AWS account credentials</p>
       </div>
       <button
-        @click="showRegisterForm = true"
+        @click="openRegisterModal"
         class="btn btn-primary"
       >
         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -81,7 +81,7 @@
         <p v-else class="text-secondary mb-4">Register your first AWS account to get started</p>
         <button 
           v-if="!error || !error.includes('404')"
-          @click="showRegisterForm = true" 
+          @click="openRegisterModal" 
           class="btn btn-primary"
         >
           Add Your First Account
@@ -197,13 +197,13 @@
 
     <!-- Register Account Modal -->
     <div v-if="showRegisterForm" class="modal modal-open">
-      <div class="modal-backdrop" @click="!isLoading && (showRegisterForm = false)"></div>
+      <div class="modal-backdrop" @click="!isLoading && closeRegisterModal()"></div>
       <div class="modal-box w-11/12 max-w-2xl relative">
         <!-- Loading Overlay -->
         <div v-if="isLoading" class="absolute inset-0 bg-white/80 dark:bg-gray-900/80 flex items-center justify-center z-50 rounded-lg">
           <div class="text-center">
             <div class="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Registering AWS account...</p>
+            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Registering account...</p>
             <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Please wait while we validate your credentials</p>
           </div>
         </div>
@@ -211,7 +211,7 @@
         <div class="flex items-center justify-between mb-4">
           <h3 class="font-bold text-lg">Register New AWS Account</h3>
           <button 
-            @click="showRegisterForm = false" 
+            @click="closeRegisterModal" 
             class="btn btn-sm btn-ghost"
             :disabled="isLoading"
           >
@@ -221,11 +221,301 @@
           </button>
         </div>
         
-        <AWSCredentialsManager
-          :is-registration="true"
-          @credentials-set="handleAccountRegistration"
-          @cancel="showRegisterForm = false"
-        />
+        <!-- Registration Form -->
+        <form @submit.prevent="handleAccountRegistration" class="space-y-6">
+          <!-- Account Details -->
+          <div class="space-y-4">
+            <h4 class="text-sm font-medium text-gray-900 dark:text-white">Account Details</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Account Alias *
+                </label>
+                <input
+                  v-model="registerForm.alias"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  :class="{ 
+                    'border-red-300 dark:border-red-600 focus:ring-red-500': 
+                      registerForm.showValidationErrors && !registerForm.alias?.trim() 
+                  }"
+                  placeholder="e.g., production, development"
+                  required
+                />
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Unique identifier for this AWS account
+                </p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Region *
+                </label>
+                <input
+                  v-model="registerForm.credentials.region"
+                  type="text"
+                  readonly
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                />
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  All accounts use us-east-1 region
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Description
+              </label>
+              <textarea
+                v-model="registerForm.description"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                placeholder="Optional description for this account"
+                rows="2"
+              ></textarea>
+            </div>
+          </div>
+
+          <!-- Credential Type Selector -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Authentication Method</label>
+            <div class="flex flex-wrap gap-4">
+              <label class="flex items-center cursor-pointer">
+                <input
+                  v-model="registerForm.authMethod"
+                  type="radio"
+                  value="sso-export"
+                  class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600"
+                />
+                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">SSO Export</span>
+              </label>
+              <label class="flex items-center cursor-pointer">
+                <input
+                  v-model="registerForm.authMethod"
+                  type="radio"
+                  value="keys"
+                  class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600"
+                />
+                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Access Keys</span>
+              </label>
+              <label class="flex items-center cursor-pointer">
+                <input
+                  v-model="registerForm.authMethod"
+                  type="radio"
+                  value="profile"
+                  class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600"
+                />
+                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">AWS Profile</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- SSO Export Form -->
+          <div v-if="registerForm.authMethod === 'sso-export'" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Paste AWS SSO Export Commands *
+              </label>
+              <textarea
+                v-model="registerForm.ssoExportText"
+                @input="parseRegisterSsoExport"
+                rows="6"
+                required
+                placeholder="Paste the export commands from AWS SSO:&#10;export AWS_ACCESS_KEY_ID=&quot;...&quot;&#10;export AWS_SECRET_ACCESS_KEY=&quot;...&quot;&#10;export AWS_SESSION_TOKEN=&quot;...&quot;"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-sm"
+                :class="{ 
+                  'border-red-300 dark:border-red-600 focus:ring-red-500': 
+                    registerForm.showValidationErrors && (!registerForm.ssoExportText?.trim() || !registerForm.parsedSsoCredentials.access_key_id)
+                }"
+              />
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Copy and paste the export commands directly from AWS SSO or CLI
+              </p>
+            </div>
+            
+            <!-- Parsed Credentials Preview -->
+            <div v-if="registerForm.parsedSsoCredentials.access_key_id" class="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+              <h4 class="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">Parsed Credentials</h4>
+              <div class="space-y-1 text-xs text-blue-700 dark:text-blue-200">
+                <div class="flex">
+                  <span class="font-medium w-32">Access Key ID:</span>
+                  <span class="font-mono">{{ registerForm.parsedSsoCredentials.access_key_id.substring(0, 10) }}...</span>
+                </div>
+                <div class="flex">
+                  <span class="font-medium w-32">Secret Key:</span>
+                  <span class="font-mono">{{ registerForm.parsedSsoCredentials.secret_access_key ? '***' + registerForm.parsedSsoCredentials.secret_access_key.slice(-4) : 'Not found' }}</span>
+                </div>
+                <div class="flex">
+                  <span class="font-medium w-32">Session Token:</span>
+                  <span class="font-mono">{{ registerForm.parsedSsoCredentials.session_token ? '***' + registerForm.parsedSsoCredentials.session_token.slice(-4) : 'Not found' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Parse Error -->
+            <div v-if="registerForm.ssoParseError" class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+              <div class="flex">
+                <svg class="h-5 w-5 text-red-600 dark:text-red-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div class="ml-2">
+                  <p class="text-sm text-red-800 dark:text-red-300">{{ registerForm.ssoParseError }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Access Keys Form -->
+          <div v-else-if="registerForm.authMethod === 'keys'" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Access Key ID *
+              </label>
+              <input
+                v-model="registerForm.credentials.access_key_id"
+                type="text"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                :class="{ 
+                  'border-red-300 dark:border-red-600 focus:ring-red-500': 
+                    registerForm.showValidationErrors && !registerForm.credentials.access_key_id?.trim() 
+                }"
+                placeholder="AKIA..."
+                required
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Secret Access Key *
+              </label>
+              <div class="relative">
+                <input
+                  v-model="registerForm.credentials.secret_access_key"
+                  :type="registerForm.showSecretKey ? 'text' : 'password'"
+                  class="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  :class="{ 
+                    'border-red-300 dark:border-red-600 focus:ring-red-500': 
+                      registerForm.showValidationErrors && !registerForm.credentials.secret_access_key?.trim() 
+                  }"
+                  placeholder="••••••••••••••••••••••••••••••••••••••••"
+                  required
+                />
+                <button
+                  type="button"
+                  @click="registerForm.showSecretKey = !registerForm.showSecretKey"
+                  class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <svg v-if="registerForm.showSecretKey" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L12 12m0 0l3.878 3.878M3 3l18 18" />
+                  </svg>
+                  <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Session Token
+              </label>
+              <input
+                v-model="registerForm.credentials.session_token"
+                type="text"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                placeholder="Optional session token"
+              />
+            </div>
+          </div>
+
+          <!-- AWS Profile -->
+          <div v-else-if="registerForm.authMethod === 'profile'">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              AWS Profile Name *
+            </label>
+            <input
+              v-model="registerForm.credentials.profile"
+              type="text"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+              :class="{ 
+                'border-red-300 dark:border-red-600 focus:ring-red-500': 
+                  registerForm.showValidationErrors && !registerForm.credentials.profile?.trim() 
+              }"
+              placeholder="default"
+              required
+            />
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Profile name from ~/.aws/credentials or ~/.aws/config
+            </p>
+          </div>
+
+          <!-- Options -->
+          <div class="flex items-center gap-4">
+            <label class="cursor-pointer flex items-center gap-2">
+              <input
+                v-model="registerForm.setAsDefault"
+                type="checkbox"
+                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded"
+              />
+              <span class="text-sm text-gray-700 dark:text-gray-300">Set as default account</span>
+            </label>
+          </div>
+
+          <!-- Validation Errors Display -->
+          <div v-if="registerForm.showValidationErrors && registerValidationMessages.length > 0" class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+            <div class="flex">
+              <svg class="h-5 w-5 text-red-600 dark:text-red-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div class="ml-2">
+                <p class="text-sm font-medium text-red-800 dark:text-red-300 mb-2">Please fix the following issues:</p>
+                <ul class="text-sm text-red-700 dark:text-red-200 space-y-1">
+                  <li v-for="message in registerValidationMessages" :key="message" class="flex items-start">
+                    <span class="mr-2">•</span>
+                    <span>{{ message }}</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex justify-end gap-2 pt-4">
+            <button
+              type="button"
+              @click="closeRegisterModal"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              :disabled="isLoading"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              @click="validateRegisterCredentials"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              :disabled="isLoading || registerForm.isValidating"
+            >
+              <span v-if="registerForm.isValidating" class="flex items-center">
+                <svg class="w-4 h-4 animate-spin mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Validating...
+              </span>
+              <span v-else>Validate</span>
+            </button>
+            <button
+              type="submit"
+              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              :disabled="isLoading || registerForm.isValidating"
+            >
+              <span v-if="isLoading" class="flex items-center">
+                <svg class="w-4 h-4 animate-spin mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Registering...
+              </span>
+              <span v-else>Register Account</span>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -255,11 +545,269 @@
           </button>
         </div>
         
-        <AWSCredentialsManager
-          :is-registration="false"
-          @credentials-set="handleAccountUpdate"
-          @cancel="cancelEdit"
-        />
+        <!-- Edit Form -->
+        <form @submit.prevent="handleAccountUpdate" class="space-y-6">
+          <!-- Account Details (Read-only) -->
+          <div class="space-y-4">
+            <h4 class="text-sm font-medium text-gray-900 dark:text-white">Account Details</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Account Alias
+                </label>
+                <input
+                  :value="editingAccount.alias"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  readonly
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Region *
+                </label>
+                <input
+                  v-model="editForm.credentials.region"
+                  type="text"
+                  readonly
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                />
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  All accounts use us-east-1 region
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Credential Type Selector -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Authentication Method</label>
+            <div class="flex flex-wrap gap-4">
+              <label class="flex items-center cursor-pointer">
+                <input
+                  v-model="editForm.authMethod"
+                  type="radio"
+                  value="sso-export"
+                  class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600"
+                />
+                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">SSO Export</span>
+              </label>
+              <label class="flex items-center cursor-pointer">
+                <input
+                  v-model="editForm.authMethod"
+                  type="radio"
+                  value="keys"
+                  class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600"
+                />
+                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Access Keys</span>
+              </label>
+              <label class="flex items-center cursor-pointer">
+                <input
+                  v-model="editForm.authMethod"
+                  type="radio"
+                  value="profile"
+                  class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600"
+                />
+                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">AWS Profile</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- SSO Export Form -->
+          <div v-if="editForm.authMethod === 'sso-export'" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Paste AWS SSO Export Commands *
+              </label>
+              <textarea
+                v-model="editForm.ssoExportText"
+                @input="parseEditSsoExport"
+                rows="6"
+                required
+                placeholder="Paste the export commands from AWS SSO:&#10;export AWS_ACCESS_KEY_ID=&quot;...&quot;&#10;export AWS_SECRET_ACCESS_KEY=&quot;...&quot;&#10;export AWS_SESSION_TOKEN=&quot;...&quot;"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-sm"
+                :class="{ 
+                  'border-red-300 dark:border-red-600 focus:ring-red-500': 
+                    editForm.showValidationErrors && (!editForm.ssoExportText?.trim() || !editForm.parsedSsoCredentials.access_key_id)
+                }"
+              />
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Copy and paste the export commands directly from AWS SSO or CLI
+              </p>
+            </div>
+            
+            <!-- Parsed Credentials Preview -->
+            <div v-if="editForm.parsedSsoCredentials.access_key_id" class="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+              <h4 class="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">Parsed Credentials</h4>
+              <div class="space-y-1 text-xs text-blue-700 dark:text-blue-200">
+                <div class="flex">
+                  <span class="font-medium w-32">Access Key ID:</span>
+                  <span class="font-mono">{{ editForm.parsedSsoCredentials.access_key_id.substring(0, 10) }}...</span>
+                </div>
+                <div class="flex">
+                  <span class="font-medium w-32">Secret Key:</span>
+                  <span class="font-mono">{{ editForm.parsedSsoCredentials.secret_access_key ? '***' + editForm.parsedSsoCredentials.secret_access_key.slice(-4) : 'Not found' }}</span>
+                </div>
+                <div class="flex">
+                  <span class="font-medium w-32">Session Token:</span>
+                  <span class="font-mono">{{ editForm.parsedSsoCredentials.session_token ? '***' + editForm.parsedSsoCredentials.session_token.slice(-4) : 'Not found' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Parse Error -->
+            <div v-if="editForm.ssoParseError" class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+              <div class="flex">
+                <svg class="h-5 w-5 text-red-600 dark:text-red-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div class="ml-2">
+                  <p class="text-sm text-red-800 dark:text-red-300">{{ editForm.ssoParseError }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Access Keys Form -->
+          <div v-else-if="editForm.authMethod === 'keys'" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Access Key ID *
+              </label>
+              <input
+                v-model="editForm.credentials.access_key_id"
+                type="text"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                :class="{ 
+                  'border-red-300 dark:border-red-600 focus:ring-red-500': 
+                    editForm.showValidationErrors && !editForm.credentials.access_key_id?.trim() 
+                }"
+                placeholder="AKIA..."
+                required
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Secret Access Key *
+              </label>
+              <div class="relative">
+                <input
+                  v-model="editForm.credentials.secret_access_key"
+                  :type="editForm.showSecretKey ? 'text' : 'password'"
+                  class="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  :class="{ 
+                    'border-red-300 dark:border-red-600 focus:ring-red-500': 
+                      editForm.showValidationErrors && !editForm.credentials.secret_access_key?.trim() 
+                  }"
+                  placeholder="••••••••••••••••••••••••••••••••••••••••"
+                  required
+                />
+                <button
+                  type="button"
+                  @click="editForm.showSecretKey = !editForm.showSecretKey"
+                  class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <svg v-if="editForm.showSecretKey" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L12 12m0 0l3.878 3.878M3 3l18 18" />
+                  </svg>
+                  <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Session Token
+              </label>
+              <input
+                v-model="editForm.credentials.session_token"
+                type="text"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                placeholder="Optional session token"
+              />
+            </div>
+          </div>
+
+          <!-- AWS Profile -->
+          <div v-else-if="editForm.authMethod === 'profile'">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              AWS Profile Name *
+            </label>
+            <input
+              v-model="editForm.credentials.profile"
+              type="text"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+              :class="{ 
+                'border-red-300 dark:border-red-600 focus:ring-red-500': 
+                  editForm.showValidationErrors && !editForm.credentials.profile?.trim() 
+              }"
+              placeholder="default"
+              required
+            />
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Profile name from ~/.aws/credentials or ~/.aws/config
+            </p>
+          </div>
+
+          <!-- Validation Errors Display -->
+          <div v-if="editForm.showValidationErrors && editValidationMessages.length > 0" class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+            <div class="flex">
+              <svg class="h-5 w-5 text-red-600 dark:text-red-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div class="ml-2">
+                <p class="text-sm font-medium text-red-800 dark:text-red-300 mb-2">Please fix the following issues:</p>
+                <ul class="text-sm text-red-700 dark:text-red-200 space-y-1">
+                  <li v-for="message in editValidationMessages" :key="message" class="flex items-start">
+                    <span class="mr-2">•</span>
+                    <span>{{ message }}</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex justify-end gap-2 pt-4">
+            <button
+              type="button"
+              @click="cancelEdit"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              :disabled="isLoading"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              @click="validateEditCredentials"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              :disabled="isLoading || editForm.isValidating"
+            >
+              <span v-if="editForm.isValidating" class="flex items-center">
+                <svg class="w-4 h-4 animate-spin mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Validating...
+              </span>
+              <span v-else>Validate</span>
+            </button>
+            <button
+              type="submit"
+              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              :disabled="isLoading || editForm.isValidating"
+            >
+              <span v-if="isLoading" class="flex items-center">
+                <svg class="w-4 h-4 animate-spin mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Updating...
+              </span>
+              <span v-else>Update Credentials</span>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -294,9 +842,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, reactive } from 'vue'
+import { ref, onMounted, onUnmounted, reactive, computed } from 'vue'
 import { useAwsAccountsStore } from '@/stores/awsAccounts'
-import AWSCredentialsManager from './AWSCredentialsManager.vue'
+// import AWSCredentialsManager from './AWSCredentialsManager.vue'
 import type { AWSAccount, AWSCredentialsRequest } from '@/types/api'
 import { storeToRefs } from 'pinia'
 
@@ -320,9 +868,167 @@ const showDeleteConfirm = ref(false)
 const deletingAccount = ref<string | null>(null)
 const openDropdowns = reactive<Record<string, boolean>>({})
 
+// Form data
+const registerForm = reactive({
+  alias: '',
+  description: '',
+  credentials: {
+    access_key_id: '',
+    secret_access_key: '',
+    session_token: '',
+    region: 'us-east-1',
+    profile: ''
+  },
+  authMethod: 'sso-export',
+  setAsDefault: false,
+  showSecretKey: false,
+  ssoExportText: '',
+  parsedSsoCredentials: {
+    access_key_id: '',
+    secret_access_key: '',
+    session_token: ''
+  },
+  ssoParseError: null as string | null,
+  showValidationErrors: false,
+  isValidating: false
+})
+
+const editForm = reactive({
+  credentials: {
+    access_key_id: '',
+    secret_access_key: '',
+    session_token: '',
+    region: 'us-east-1',
+    profile: ''
+  },
+  authMethod: 'sso-export',
+  showSecretKey: false,
+  ssoExportText: '',
+  parsedSsoCredentials: {
+    access_key_id: '',
+    secret_access_key: '',
+    session_token: ''
+  },
+  ssoParseError: null as string | null,
+  showValidationErrors: false,
+  isValidating: false
+})
+
+// Computed properties
+const registerValidationMessages = computed(() => {
+  const messages: string[] = []
+  
+  if (!registerForm.alias?.trim()) {
+    messages.push('Account alias is required')
+  } else if (!/^[a-zA-Z0-9-_]+$/.test(registerForm.alias.trim())) {
+    messages.push('Account alias can only contain letters, numbers, hyphens, and underscores')
+  }
+  
+  if (registerForm.authMethod === 'keys') {
+    if (!registerForm.credentials.access_key_id?.trim()) {
+      messages.push('Access Key ID is required')
+    }
+    if (!registerForm.credentials.secret_access_key?.trim()) {
+      messages.push('Secret Access Key is required')
+    }
+  } else if (registerForm.authMethod === 'profile') {
+    if (!registerForm.credentials.profile?.trim()) {
+      messages.push('AWS Profile name is required')
+    }
+  } else if (registerForm.authMethod === 'sso-export') {
+    if (!registerForm.ssoExportText?.trim()) {
+      messages.push('Please paste AWS SSO export commands')
+    } else if (!registerForm.parsedSsoCredentials.access_key_id) {
+      messages.push('Could not find AWS_ACCESS_KEY_ID in export commands')
+    } else if (!registerForm.parsedSsoCredentials.secret_access_key) {
+      messages.push('Could not find AWS_SECRET_ACCESS_KEY in export commands')
+    }
+  }
+  
+  return messages
+})
+
+const editValidationMessages = computed(() => {
+  const messages: string[] = []
+  
+  if (editForm.authMethod === 'keys') {
+    if (!editForm.credentials.access_key_id?.trim()) {
+      messages.push('Access Key ID is required')
+    }
+    if (!editForm.credentials.secret_access_key?.trim()) {
+      messages.push('Secret Access Key is required')
+    }
+  } else if (editForm.authMethod === 'profile') {
+    if (!editForm.credentials.profile?.trim()) {
+      messages.push('AWS Profile name is required')
+    }
+  } else if (editForm.authMethod === 'sso-export') {
+    if (!editForm.ssoExportText?.trim()) {
+      messages.push('Please paste AWS SSO export commands')
+    } else if (!editForm.parsedSsoCredentials.access_key_id) {
+      messages.push('Could not find AWS_ACCESS_KEY_ID in export commands')
+    } else if (!editForm.parsedSsoCredentials.secret_access_key) {
+      messages.push('Could not find AWS_SECRET_ACCESS_KEY in export commands')
+    }
+  }
+  
+  return messages
+})
+
 // Methods
 const clearError = () => {
   accountsStore.clearError()
+}
+
+const openRegisterModal = () => {
+  resetRegisterForm()
+  showRegisterForm.value = true
+}
+
+const closeRegisterModal = () => {
+  showRegisterForm.value = false
+  resetRegisterForm()
+}
+
+const resetRegisterForm = () => {
+  registerForm.alias = ''
+  registerForm.description = ''
+  registerForm.credentials.access_key_id = ''
+  registerForm.credentials.secret_access_key = ''
+  registerForm.credentials.session_token = ''
+  registerForm.credentials.region = 'us-east-1'
+  registerForm.credentials.profile = ''
+  registerForm.authMethod = 'sso-export'
+  registerForm.setAsDefault = false
+  registerForm.showSecretKey = false
+  registerForm.ssoExportText = ''
+  registerForm.parsedSsoCredentials = {
+    access_key_id: '',
+    secret_access_key: '',
+    session_token: ''
+  }
+  registerForm.ssoParseError = null
+  registerForm.showValidationErrors = false
+  registerForm.isValidating = false
+}
+
+const resetEditForm = () => {
+  editForm.credentials.access_key_id = ''
+  editForm.credentials.secret_access_key = ''
+  editForm.credentials.session_token = ''
+  editForm.credentials.region = 'us-east-1'
+  editForm.credentials.profile = ''
+  editForm.authMethod = 'sso-export'
+  editForm.showSecretKey = false
+  editForm.ssoExportText = ''
+  editForm.parsedSsoCredentials = {
+    access_key_id: '',
+    secret_access_key: '',
+    session_token: ''
+  }
+  editForm.ssoParseError = null
+  editForm.showValidationErrors = false
+  editForm.isValidating = false
 }
 
 const setActiveAccount = async (alias: string) => {
@@ -349,20 +1055,36 @@ const setDefaultAccount = async (alias: string) => {
   }
 }
 
-const handleAccountRegistration = async (event: { credentials: AWSCredentialsRequest, alias?: string, description?: string, setAsDefault?: boolean }) => {
-  if (!event.alias) {
-    console.error('Alias is required for account registration')
+const handleAccountRegistration = async () => {
+  if (!registerForm.alias || !registerForm.credentials.region) {
+    console.error('Alias and region are required for account registration')
     return
   }
   
   try {
+    // Prepare credentials based on auth method
+    const credentials: AWSCredentialsRequest = {
+      region: registerForm.credentials.region
+    }
+    
+    if (registerForm.authMethod === 'profile') {
+      credentials.profile = registerForm.credentials.profile
+    } else {
+      credentials.access_key_id = registerForm.credentials.access_key_id
+      credentials.secret_access_key = registerForm.credentials.secret_access_key
+      if (registerForm.credentials.session_token) {
+        credentials.session_token = registerForm.credentials.session_token
+      }
+    }
+    
     await accountsStore.registerAccount({
-      alias: event.alias,
-      credentials: event.credentials,
-      description: event.description,
-      set_as_default: event.setAsDefault
+      alias: registerForm.alias,
+      credentials,
+      description: registerForm.description || undefined,
+      set_as_default: registerForm.setAsDefault
     })
-    showRegisterForm.value = false
+    
+    closeRegisterModal()
   } catch (err) {
     console.error('Failed to register account:', err)
   }
@@ -370,23 +1092,43 @@ const handleAccountRegistration = async (event: { credentials: AWSCredentialsReq
 
 const editAccount = (account: AWSAccount) => {
   editingAccount.value = account
+  // Initialize form with current account data
+  editForm.credentials.region = account.region
+  editForm.authMethod = account.uses_profile ? 'profile' : 'keys'
   showEditForm.value = true
 }
 
-const handleAccountUpdate = async (event: { credentials: AWSCredentialsRequest }) => {
-  if (!editingAccount.value) return
+const handleAccountUpdate = async () => {
+  if (!editingAccount.value) {
+    console.error('No account selected for editing')
+    return
+  }
+  
+  if (editValidationMessages.value.length > 0) {
+    editForm.showValidationErrors = true
+    return
+  }
+  
+  editForm.showValidationErrors = false
+  isLoading.value = true
   
   try {
-    await accountsStore.updateAccountCredentials(editingAccount.value.alias, event.credentials)
+    // Create credentials object based on auth method
+    const credentials = createEditCredentialsObject()
+    
+    await accountsStore.updateAccountCredentials(editingAccount.value.alias, credentials)
     cancelEdit()
   } catch (err) {
     console.error('Failed to update account:', err)
+  } finally {
+    isLoading.value = false
   }
 }
 
 const cancelEdit = () => {
   editingAccount.value = null
   showEditForm.value = false
+  resetEditForm()
 }
 
 const deleteAccount = (alias: string) => {
@@ -443,6 +1185,208 @@ const handleClickOutside = (event: Event) => {
   if (!target.closest('.relative')) {
     closeAllDropdowns()
   }
+}
+
+const parseRegisterSsoExport = () => {
+  registerForm.ssoParseError = null
+  registerForm.parsedSsoCredentials = { access_key_id: '', secret_access_key: '', session_token: '' }
+
+  if (!registerForm.ssoExportText.trim()) return
+
+  try {
+    const lines = registerForm.ssoExportText.split('\n')
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim()
+      
+      // Match export AWS_ACCESS_KEY_ID="value" or export AWS_ACCESS_KEY_ID=value
+      const accessKeyMatch = trimmedLine.match(/export\s+AWS_ACCESS_KEY_ID\s*=\s*["']?([^"'\s]+)["']?/)
+      if (accessKeyMatch) {
+        registerForm.parsedSsoCredentials.access_key_id = accessKeyMatch[1]
+        continue
+      }
+      
+      // Match export AWS_SECRET_ACCESS_KEY="value" or export AWS_SECRET_ACCESS_KEY=value
+      const secretKeyMatch = trimmedLine.match(/export\s+AWS_SECRET_ACCESS_KEY\s*=\s*["']?([^"'\s]+)["']?/)
+      if (secretKeyMatch) {
+        registerForm.parsedSsoCredentials.secret_access_key = secretKeyMatch[1]
+        continue
+      }
+      
+      // Match export AWS_SESSION_TOKEN="value" or export AWS_SESSION_TOKEN=value
+      const sessionTokenMatch = trimmedLine.match(/export\s+AWS_SESSION_TOKEN\s*=\s*["']?([^"'\s]+)["']?/)
+      if (sessionTokenMatch) {
+        registerForm.parsedSsoCredentials.session_token = sessionTokenMatch[1]
+        continue
+      }
+    }
+    
+    // Validate that we got the required credentials
+    if (!registerForm.parsedSsoCredentials.access_key_id) {
+      registerForm.ssoParseError = 'AWS_ACCESS_KEY_ID not found in the export commands'
+    } else if (!registerForm.parsedSsoCredentials.secret_access_key) {
+      registerForm.ssoParseError = 'AWS_SECRET_ACCESS_KEY not found in the export commands'
+    }
+    
+  } catch (error) {
+    registerForm.ssoParseError = 'Failed to parse export commands. Please check the format.'
+  }
+}
+
+const validateRegisterCredentials = async () => {
+  if (registerValidationMessages.value.length > 0) {
+    registerForm.showValidationErrors = true
+    return
+  }
+
+  registerForm.showValidationErrors = false
+  registerForm.isValidating = true
+
+  try {
+    // Create credentials object based on auth method
+    const credentials = createRegisterCredentialsObject()
+    
+    // Here you would validate with your API
+    // For now, just simulate validation
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
+    console.log('Credentials validated successfully:', credentials)
+  } catch (err) {
+    console.error('Failed to validate credentials:', err)
+  } finally {
+    registerForm.isValidating = false
+  }
+}
+
+const createRegisterCredentialsObject = (): AWSCredentialsRequest => {
+  if (registerForm.authMethod === 'keys') {
+    return {
+      access_key_id: registerForm.credentials.access_key_id,
+      secret_access_key: registerForm.credentials.secret_access_key,
+      session_token: registerForm.credentials.session_token || undefined,
+      region: registerForm.credentials.region,
+      profile: undefined
+    }
+  } else if (registerForm.authMethod === 'profile') {
+    return {
+      access_key_id: undefined,
+      secret_access_key: undefined,
+      session_token: undefined,
+      region: registerForm.credentials.region,
+      profile: registerForm.credentials.profile
+    }
+  } else if (registerForm.authMethod === 'sso-export') {
+    return {
+      access_key_id: registerForm.parsedSsoCredentials.access_key_id,
+      secret_access_key: registerForm.parsedSsoCredentials.secret_access_key,
+      session_token: registerForm.parsedSsoCredentials.session_token || undefined,
+      region: registerForm.credentials.region,
+      profile: undefined
+    }
+  }
+  
+  throw new Error('Invalid credential type')
+}
+
+const parseEditSsoExport = () => {
+  editForm.ssoParseError = null
+  editForm.parsedSsoCredentials = { access_key_id: '', secret_access_key: '', session_token: '' }
+
+  if (!editForm.ssoExportText.trim()) return
+
+  try {
+    const lines = editForm.ssoExportText.split('\n')
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim()
+      
+      // Match export AWS_ACCESS_KEY_ID="value" or export AWS_ACCESS_KEY_ID=value
+      const accessKeyMatch = trimmedLine.match(/export\s+AWS_ACCESS_KEY_ID\s*=\s*["']?([^"'\s]+)["']?/)
+      if (accessKeyMatch) {
+        editForm.parsedSsoCredentials.access_key_id = accessKeyMatch[1]
+        continue
+      }
+      
+      // Match export AWS_SECRET_ACCESS_KEY="value" or export AWS_SECRET_ACCESS_KEY=value
+      const secretKeyMatch = trimmedLine.match(/export\s+AWS_SECRET_ACCESS_KEY\s*=\s*["']?([^"'\s]+)["']?/)
+      if (secretKeyMatch) {
+        editForm.parsedSsoCredentials.secret_access_key = secretKeyMatch[1]
+        continue
+      }
+      
+      // Match export AWS_SESSION_TOKEN="value" or export AWS_SESSION_TOKEN=value
+      const sessionTokenMatch = trimmedLine.match(/export\s+AWS_SESSION_TOKEN\s*=\s*["']?([^"'\s]+)["']?/)
+      if (sessionTokenMatch) {
+        editForm.parsedSsoCredentials.session_token = sessionTokenMatch[1]
+        continue
+      }
+    }
+    
+    // Validate that we got the required credentials
+    if (!editForm.parsedSsoCredentials.access_key_id) {
+      editForm.ssoParseError = 'AWS_ACCESS_KEY_ID not found in the export commands'
+    } else if (!editForm.parsedSsoCredentials.secret_access_key) {
+      editForm.ssoParseError = 'AWS_SECRET_ACCESS_KEY not found in the export commands'
+    }
+    
+  } catch (error) {
+    editForm.ssoParseError = 'Failed to parse export commands. Please check the format.'
+  }
+}
+
+const validateEditCredentials = async () => {
+  if (editValidationMessages.value.length > 0) {
+    editForm.showValidationErrors = true
+    return
+  }
+
+  editForm.showValidationErrors = false
+  editForm.isValidating = true
+
+  try {
+    // Create credentials object based on auth method
+    const credentials = createEditCredentialsObject()
+    
+    // Here you would validate with your API
+    // For now, just simulate validation
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
+    console.log('Edit credentials validated successfully:', credentials)
+  } catch (err) {
+    console.error('Failed to validate credentials:', err)
+  } finally {
+    editForm.isValidating = false
+  }
+}
+
+const createEditCredentialsObject = (): AWSCredentialsRequest => {
+  if (editForm.authMethod === 'keys') {
+    return {
+      access_key_id: editForm.credentials.access_key_id,
+      secret_access_key: editForm.credentials.secret_access_key,
+      session_token: editForm.credentials.session_token || undefined,
+      region: editForm.credentials.region,
+      profile: undefined
+    }
+  } else if (editForm.authMethod === 'profile') {
+    return {
+      access_key_id: undefined,
+      secret_access_key: undefined,
+      session_token: undefined,
+      region: editForm.credentials.region,
+      profile: editForm.credentials.profile
+    }
+  } else if (editForm.authMethod === 'sso-export') {
+    return {
+      access_key_id: editForm.parsedSsoCredentials.access_key_id,
+      secret_access_key: editForm.parsedSsoCredentials.secret_access_key,
+      session_token: editForm.parsedSsoCredentials.session_token || undefined,
+      region: editForm.credentials.region,
+      profile: undefined
+    }
+  }
+  
+  throw new Error('Invalid credential type')
 }
 
 // Lifecycle

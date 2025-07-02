@@ -182,9 +182,20 @@ class MCPConfig:
             # Replace ${VAR_NAME} with environment variable value
             def replace_env_var(match):
                 var_name = match.group(1)
-                return os.getenv(var_name, match.group(0))  # Return original if not found
+                env_value = os.getenv(var_name)
+                if env_value is None:
+                    # Return None for unset environment variables instead of the placeholder
+                    return None
+                return env_value
             
-            return re.sub(r'\$\{([^}]+)\}', replace_env_var, config)
+            # Check if this string contains environment variable placeholders
+            if '${' in config:
+                expanded = re.sub(r'\$\{([^}]+)\}', replace_env_var, config)
+                # If the expansion resulted in None, return None
+                if expanded is None or 'None' in expanded:
+                    return None
+                return expanded
+            return config
         else:
             return config
     

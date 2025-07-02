@@ -7,9 +7,6 @@ import type {
   TaskRequest,
   TaskResponse,
   AWSAccountInfo,
-  AWSCredentialsRequest,
-  AWSCredentialsResponse,
-  AWSCredentialsValidation,
   AWSAccount,
   AWSAccountRequest,
   AWSAccountUpdateRequest,
@@ -171,26 +168,6 @@ class ApiService {
   async optimizeCosts(): Promise<TaskResponse> {
     const response = await this.client.post<TaskResponse>('/aws/cost-optimization')
     return response.data
-  }
-
-  // AWS Credentials endpoints
-  async setAwsCredentials(request: AWSCredentialsRequest): Promise<AWSCredentialsResponse> {
-    const response = await this.client.post<AWSCredentialsResponse>('/aws/credentials', request)
-    return response.data
-  }
-
-  async getAwsCredentials(): Promise<AWSCredentialsResponse> {
-    const response = await this.client.get<AWSCredentialsResponse>('/aws/credentials')
-    return response.data
-  }
-
-  async validateAwsCredentials(request: AWSCredentialsRequest): Promise<AWSCredentialsValidation> {
-    const response = await this.client.post<AWSCredentialsValidation>('/aws/credentials/validate', request)
-    return response.data
-  }
-
-  async clearAwsCredentials(): Promise<void> {
-    await this.client.delete('/aws/credentials')
   }
 
   // Multi-Account AWS Management endpoints

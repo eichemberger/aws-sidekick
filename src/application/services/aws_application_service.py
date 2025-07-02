@@ -27,8 +27,6 @@ class AWSApplicationService(AWSServicePort):
         self._mcp_reinitialization_port = mcp_reinitialization_port
         self._default_credentials = default_credentials
         self._active_account_alias: Optional[str] = None
-        # Keep legacy session credentials for backward compatibility
-        self._session_credentials: Optional[AWSCredentials] = None
 
     async def set_active_account(self, account_alias: str) -> None:
         """Set active AWS account for current session"""
@@ -159,69 +157,10 @@ class AWSApplicationService(AWSServicePort):
                 if credentials_loaded and default_account.credentials:
                     return default_account.credentials
             
-            if self._session_credentials:
-                return self._session_credentials
-            elif self._default_credentials:
+            if self._default_credentials:
                 return self._default_credentials
             else:
                 raise ValueError("No credentials available. Please select an account and ensure credentials are entered via the UI.")
-
-    # Legacy method for backward compatibility
-    async def set_credentials(self, credentials: AWSCredentials) -> None:
-        """Set session-specific AWS credentials and update environment"""
-        # Validate the credentials first
-        is_valid = await self.validate_credentials(credentials)
-        if not is_valid:
-            raise ValueError("Invalid AWS credentials provided")
-        
-        # Store in session
-        self._session_credentials = credentials
-        
-        # Also update environment variables so MCP tools can use them
-        if credentials.uses_keys():
-            os.environ["AWS_ACCESS_KEY_ID"] = credentials.access_key_id or ""
-            os.environ["AWS_SECRET_ACCESS_KEY"] = credentials.secret_access_key or ""
-            if credentials.session_token:
-                os.environ["AWS_SESSION_TOKEN"] = credentials.session_token
-            else:
-                # Remove session token if not provided
-                os.environ.pop("AWS_SESSION_TOKEN", None)
-            # Clear profile when using keys
-            os.environ.pop("AWS_PROFILE", None)
-        elif credentials.uses_profile():
-            os.environ["AWS_PROFILE"] = credentials.profile or ""
-            # Clear explicit keys when using profile
-            os.environ.pop("AWS_ACCESS_KEY_ID", None)
-            os.environ.pop("AWS_SECRET_ACCESS_KEY", None)
-            os.environ.pop("AWS_SESSION_TOKEN", None)
-        
-        # Always set the region
-        os.environ["AWS_DEFAULT_REGION"] = credentials.region
-        
-        # Reinitialize MCP servers with new credentials
-        if self._mcp_reinitialization_port:
-            try:
-                await self._mcp_reinitialization_port.reinitialize_with_new_credentials()
-            except Exception as e:
-                logger.warning(f"mcp_reinitialization_failed | error=<{str(e)}> | credentials may not be available to all tools")
-        else:
-            logger.warning("mcp_reinitialization_port_not_configured | credentials may not be available to all tools")
-        
-        logger.info(f"session_credentials_updated | region=<{credentials.region}> | credential_type=<{'profile' if credentials.uses_profile() else 'keys'}>")
-
-    async def clear_credentials(self) -> None:
-        """Clear session-specific AWS credentials and restore defaults (deprecated, use clear_active_account)"""
-        self._session_credentials = None
-        await self._restore_default_environment()
-        logger.info("session_credentials_cleared | restored_default_configuration")
-
-    def get_current_credentials(self) -> Optional[AWSCredentials]:
-        """Get current session credentials (deprecated, use get_active_account_alias)"""
-        return self._session_credentials
-
-    async def validate_credentials(self, credentials: AWSCredentials) -> bool:
-        """Validate AWS credentials (deprecated)"""
-        return await self._aws_analysis_use_case.validate_credentials(credentials)
 
     async def get_account_info(self, account_alias: Optional[str] = None) -> AWSAccountInfo:
         """Get AWS account information"""
@@ -268,9 +207,6 @@ class AWSApplicationService(AWSServicePort):
     def _get_credentials(self) -> AWSCredentials:
         """Get AWS credentials from session state or default (deprecated)"""
         # Priority: session credentials -> default credentials -> environment credentials
-        if self._session_credentials:
-            return self._session_credentials
-        
         if self._default_credentials:
             return self._default_credentials
         
