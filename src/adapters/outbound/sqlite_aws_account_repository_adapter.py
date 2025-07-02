@@ -34,35 +34,50 @@ class SQLiteAWSAccountRepositoryAdapter(AWSAccountRepositoryPort):
         if self._initialized:
             return
             
-        async with aiosqlite.connect(self.db_path) as db:
-            # Create new secure table structure (NO credentials stored)
-            await db.execute("""
-                CREATE TABLE IF NOT EXISTS aws_account_metadata (
-                    alias TEXT PRIMARY KEY,
-                    account_id TEXT,
-                    description TEXT,
-                    region TEXT DEFAULT 'us-east-1',
-                    uses_profile INTEGER DEFAULT 0,
-                    is_default INTEGER DEFAULT 0,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                # Create secure table structure (NO credentials stored)
+                await db.execute("""
+                    CREATE TABLE IF NOT EXISTS aws_account_metadata (
+                        alias TEXT PRIMARY KEY,
+                        account_id TEXT,
+                        description TEXT,
+                        region TEXT DEFAULT 'us-east-1',
+                        uses_profile INTEGER DEFAULT 0,
+                        is_default INTEGER DEFAULT 0,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                """)
+                
+                # Create index for finding default account
+                await db.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_aws_account_metadata_default 
+                    ON aws_account_metadata (is_default)
+                """)
+                
+                await db.commit()
+                
+                # Verify the table was created
+                cursor = await db.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='aws_account_metadata'"
                 )
-            """)
+                result = await cursor.fetchone()
+                await cursor.close()
+                
+                if result:
+                    self.logger.info(f"AWS account metadata database initialized at {self.db_path}")
+                    self.logger.info("SECURITY: Credentials are NEVER stored in database - only in memory")
+                else:
+                    raise RuntimeError("Failed to create aws_account_metadata table")
+                
+            self._initialized = True
             
-            # Create index for finding default account
-            await db.execute("""
-                CREATE INDEX IF NOT EXISTS idx_aws_account_metadata_default 
-                ON aws_account_metadata (is_default)
-            """)
-            
-            # Migration: Drop old insecure table if it exists
-            await db.execute("DROP TABLE IF EXISTS aws_accounts")
-            
-            await db.commit()
-            
-        self.logger.info(f"AWS account metadata database initialized at {self.db_path}")
-        self.logger.info("SECURITY: Credentials are NEVER stored in database - only in memory")
-        self._initialized = True
+        except Exception as e:
+            self.logger.error(f"Failed to initialize AWS account database at {self.db_path}: {e}")
+            self.logger.error("Database initialization failed - this will cause account operations to fail")
+            # Don't set _initialized to True if there was an error
+            raise RuntimeError(f"Database initialization failed: {e}")
 
     def _metadata_to_dict(self, metadata: AWSAccountMetadata) -> dict:
         """Convert AWSAccountMetadata entity to dictionary for database storage"""

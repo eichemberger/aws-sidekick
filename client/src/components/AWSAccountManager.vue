@@ -1056,26 +1056,22 @@ const setDefaultAccount = async (alias: string) => {
 }
 
 const handleAccountRegistration = async () => {
+  // Validate form before submission
+  if (registerValidationMessages.value.length > 0) {
+    registerForm.showValidationErrors = true
+    return
+  }
+
+  registerForm.showValidationErrors = false
+  
   if (!registerForm.alias || !registerForm.credentials.region) {
     console.error('Alias and region are required for account registration')
     return
   }
   
   try {
-    // Prepare credentials based on auth method
-    const credentials: AWSCredentialsRequest = {
-      region: registerForm.credentials.region
-    }
-    
-    if (registerForm.authMethod === 'profile') {
-      credentials.profile = registerForm.credentials.profile
-    } else {
-      credentials.access_key_id = registerForm.credentials.access_key_id
-      credentials.secret_access_key = registerForm.credentials.secret_access_key
-      if (registerForm.credentials.session_token) {
-        credentials.session_token = registerForm.credentials.session_token
-      }
-    }
+    // Create credentials object based on auth method
+    const credentials = createRegisterCredentialsObject()
     
     await accountsStore.registerAccount({
       alias: registerForm.alias,
@@ -1199,22 +1195,26 @@ const parseRegisterSsoExport = () => {
     for (const line of lines) {
       const trimmedLine = line.trim()
       
+      // Skip empty lines and comments
+      if (!trimmedLine || trimmedLine.startsWith('#')) continue
+      
       // Match export AWS_ACCESS_KEY_ID="value" or export AWS_ACCESS_KEY_ID=value
-      const accessKeyMatch = trimmedLine.match(/export\s+AWS_ACCESS_KEY_ID\s*=\s*["']?([^"'\s]+)["']?/)
+      // Also handle cases without 'export' prefix
+      const accessKeyMatch = trimmedLine.match(/(?:export\s+)?AWS_ACCESS_KEY_ID\s*=\s*["']?([^"'\s]+)["']?/)
       if (accessKeyMatch) {
         registerForm.parsedSsoCredentials.access_key_id = accessKeyMatch[1]
         continue
       }
       
       // Match export AWS_SECRET_ACCESS_KEY="value" or export AWS_SECRET_ACCESS_KEY=value
-      const secretKeyMatch = trimmedLine.match(/export\s+AWS_SECRET_ACCESS_KEY\s*=\s*["']?([^"'\s]+)["']?/)
+      const secretKeyMatch = trimmedLine.match(/(?:export\s+)?AWS_SECRET_ACCESS_KEY\s*=\s*["']?([^"'\s]+)["']?/)
       if (secretKeyMatch) {
         registerForm.parsedSsoCredentials.secret_access_key = secretKeyMatch[1]
         continue
       }
       
       // Match export AWS_SESSION_TOKEN="value" or export AWS_SESSION_TOKEN=value
-      const sessionTokenMatch = trimmedLine.match(/export\s+AWS_SESSION_TOKEN\s*=\s*["']?([^"'\s]+)["']?/)
+      const sessionTokenMatch = trimmedLine.match(/(?:export\s+)?AWS_SESSION_TOKEN\s*=\s*["']?([^"'\s]+)["']?/)
       if (sessionTokenMatch) {
         registerForm.parsedSsoCredentials.session_token = sessionTokenMatch[1]
         continue
@@ -1300,22 +1300,26 @@ const parseEditSsoExport = () => {
     for (const line of lines) {
       const trimmedLine = line.trim()
       
+      // Skip empty lines and comments
+      if (!trimmedLine || trimmedLine.startsWith('#')) continue
+      
       // Match export AWS_ACCESS_KEY_ID="value" or export AWS_ACCESS_KEY_ID=value
-      const accessKeyMatch = trimmedLine.match(/export\s+AWS_ACCESS_KEY_ID\s*=\s*["']?([^"'\s]+)["']?/)
+      // Also handle cases without 'export' prefix
+      const accessKeyMatch = trimmedLine.match(/(?:export\s+)?AWS_ACCESS_KEY_ID\s*=\s*["']?([^"'\s]+)["']?/)
       if (accessKeyMatch) {
         editForm.parsedSsoCredentials.access_key_id = accessKeyMatch[1]
         continue
       }
       
       // Match export AWS_SECRET_ACCESS_KEY="value" or export AWS_SECRET_ACCESS_KEY=value
-      const secretKeyMatch = trimmedLine.match(/export\s+AWS_SECRET_ACCESS_KEY\s*=\s*["']?([^"'\s]+)["']?/)
+      const secretKeyMatch = trimmedLine.match(/(?:export\s+)?AWS_SECRET_ACCESS_KEY\s*=\s*["']?([^"'\s]+)["']?/)
       if (secretKeyMatch) {
         editForm.parsedSsoCredentials.secret_access_key = secretKeyMatch[1]
         continue
       }
       
       // Match export AWS_SESSION_TOKEN="value" or export AWS_SESSION_TOKEN=value
-      const sessionTokenMatch = trimmedLine.match(/export\s+AWS_SESSION_TOKEN\s*=\s*["']?([^"'\s]+)["']?/)
+      const sessionTokenMatch = trimmedLine.match(/(?:export\s+)?AWS_SESSION_TOKEN\s*=\s*["']?([^"'\s]+)["']?/)
       if (sessionTokenMatch) {
         editForm.parsedSsoCredentials.session_token = sessionTokenMatch[1]
         continue

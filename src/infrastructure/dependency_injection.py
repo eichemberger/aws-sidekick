@@ -160,20 +160,6 @@ class DependencyContainer:
             # Always use SQLite for AWS accounts since they need persistence
             account_db_path = config.database.sqlite_path.replace('tasks.db', 'aws_accounts.db')
             
-            # Run database migration if needed (security fix)
-            import asyncio
-            from infrastructure.migration_helper import migrate_database_if_needed
-            
-            # Run migration synchronously during initialization
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                migration_success = loop.run_until_complete(migrate_database_if_needed(account_db_path))
-                if not migration_success:
-                    raise RuntimeError("Database migration failed")
-            finally:
-                loop.close()
-            
             self._instances['aws_account_repository'] = SQLiteAWSAccountRepositoryAdapter(
                 db_path=account_db_path
             )
