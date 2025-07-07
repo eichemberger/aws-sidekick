@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional, Dict, Set
+from typing import Optional, Dict
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from infrastructure.logging import get_logger

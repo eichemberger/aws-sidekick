@@ -156,6 +156,7 @@ class DependencyContainer:
             try:
                 migration_success = loop.run_until_complete(migrate_chat_database_if_needed(chat_db_path))
                 if not migration_success:
+                    from infrastructure.logging import get_logger
                     logger = get_logger(__name__)
                     logger.warning("Chat database migration failed, continuing anyway")
             finally:

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 from core.domain.entities.aws_resource import AWSResource, ResourceType
-from core.domain.value_objects.aws_credentials import AWSAccountInfo, AWSCredentials
+from core.domain.value_objects.aws_credentials import AWSAccountInfo
 
 
 class AWSServicePort(ABC):

@@ -271,7 +271,7 @@ class ProcessChatMessageUseCase:
             return agent_response
             
         except asyncio.TimeoutError:
-            self._logger.error(f"Agent processing timed out after 30 seconds")
+            self._logger.error("Agent processing timed out after 30 seconds")
             raise MessageProcessingError("Agent processing timed out")
         except Exception as e:
             processing_time = asyncio.get_event_loop().time() - start_time

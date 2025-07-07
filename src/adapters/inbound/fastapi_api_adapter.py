@@ -2,7 +2,6 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List, AsyncGenerator
-import uuid
 from datetime import datetime
 import json
 import asyncio
