@@ -18,7 +18,7 @@
           @keydown="handleKeydown"
           @input="adjustTextareaHeight"
           :placeholder="disabled ? 'Processing...' : !canSendMessage ? 'Please select an AWS account to start chatting...' : 'Ask me anything about your AWS infrastructure...'"
-          class="w-full bg-gray-50/50 dark:bg-gray-800/50 border border-gray-300/50 dark:border-gray-600/50 rounded-2xl px-6 py-4 pr-14 text-sm leading-5 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-200"
+          class="w-full bg-gray-50/50 dark:bg-gray-800/50 border border-gray-300/50 dark:border-gray-600/50 rounded-2xl px-6 py-4 pr-14 text-sm leading-5 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-200 overflow-y-auto custom-scrollbar"
           :class="{ 
             'opacity-60 cursor-not-allowed': disabled || !canSendMessage
           }"
@@ -30,7 +30,7 @@
         <button
           @click="sendMessage"
           :disabled="!inputMessage.trim() || disabled || !canSendMessage"
-          class="absolute right-2 bottom-2 p-2 rounded-xl transition-all duration-200 shadow-lg"
+          class="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-xl transition-all duration-200 shadow-lg"
           :class="inputMessage.trim() && !disabled && canSendMessage
             ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-blue-500/25' 
             : 'text-gray-400 dark:text-gray-500 cursor-not-allowed bg-gray-200 dark:bg-gray-700/50'"
@@ -91,7 +91,7 @@ const canSendMessage = computed(() => Boolean(activeAccount.value))
 const adjustTextareaHeight = () => {
   if (messageInput.value) {
     messageInput.value.style.height = 'auto'
-    messageInput.value.style.height = Math.min(messageInput.value.scrollHeight, 200) + 'px'
+    messageInput.value.style.height = Math.min(messageInput.value.scrollHeight, 260) + 'px'
   }
 }
 
@@ -151,6 +151,42 @@ textarea:focus-visible {
 /* Better disabled state styling */
 textarea:disabled {
   background-color: rgb(156 163 175 / 0.1);
+}
+
+/* Custom scrollbar styling */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(156 163 175 / 0.5) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgb(156 163 175 / 0.5);
+  border-radius: 2px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(156 163 175 / 0.8);
+}
+
+/* Dark mode scrollbar */
+.dark .custom-scrollbar {
+  scrollbar-color: rgb(75 85 99 / 0.5) transparent;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgb(75 85 99 / 0.5);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(75 85 99 / 0.8);
 }
 
 @media (prefers-reduced-motion: reduce) {
