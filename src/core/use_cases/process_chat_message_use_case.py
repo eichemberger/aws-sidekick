@@ -15,6 +15,7 @@ from core.ports.outbound.aws_account_repository_port import AWSAccountRepository
 from core.ports.outbound.chat_repository_port import ChatRepositoryPort
 from core.ports.outbound.agent_repository_port import AgentRepositoryPort
 from core.ports.outbound.aws_client_port import AWSClientPort
+from core.ports.inbound.chat_service_port import ChatServicePort
 from infrastructure.logging import get_logger
 
 
@@ -26,12 +27,14 @@ class ProcessChatMessageUseCase:
         aws_account_repository: AWSAccountRepositoryPort,
         chat_repository: ChatRepositoryPort,
         agent_repository: AgentRepositoryPort,
-        aws_client: AWSClientPort
+        aws_client: AWSClientPort,
+        chat_service: ChatServicePort
     ):
         self._aws_account_repository = aws_account_repository
         self._chat_repository = chat_repository
         self._agent_repository = agent_repository
         self._aws_client = aws_client
+        self._chat_service = chat_service
         self._logger = get_logger(__name__)
         self._response_processor = AgentResponseProcessor()
         
@@ -76,7 +79,7 @@ class ProcessChatMessageUseCase:
             
             # Phase 2: Prepare conversation context
             conversation = await self._ensure_conversation_context(
-                conversation_id, account_alias
+                conversation_id, account_alias, message
             )
             
             # Phase 3: High-performance parallel execution
@@ -191,7 +194,8 @@ class ProcessChatMessageUseCase:
     async def _ensure_conversation_context(
         self, 
         conversation_id: Optional[str], 
-        account_alias: Optional[str]
+        account_alias: Optional[str],
+        message: str
     ):
         """Ensure conversation context exists with optimized creation"""
         
@@ -208,32 +212,10 @@ class ProcessChatMessageUseCase:
             self._conversation_cache[conversation_id] = conversation
             return conversation
         
-        # Create new conversation with optimized account context
-        account_id = None
-        if account_alias:
-            try:
-                cached_context = await self._account_cache.get_validated_context(
-                    account_alias,
-                    lambda alias: self._aws_account_repository.get_account_by_alias(alias)
-                )
-                account_id = cached_context.account_id
-            except Exception:
-                # Continue without account_id if account validation fails
-                pass
-        
-        from core.domain.entities.chat import Conversation
-        
-        # Create conversation entity
-        conversation = Conversation(
-            id=str(uuid.uuid4()),
-            title="New Conversation",
-            account_id=account_id or "default",
-            created_at=datetime.now(),
-            updated_at=datetime.now()
+        # Create new conversation using the chat service which will generate proper title
+        conversation = await self._chat_service.create_conversation_from_message(
+            message, account_alias
         )
-        
-        # Persist the conversation
-        conversation = await self._chat_repository.create_conversation(conversation)
         
         # Cache the new conversation
         self._conversation_cache[conversation.id] = conversation

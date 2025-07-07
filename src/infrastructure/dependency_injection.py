@@ -204,7 +204,8 @@ class DependencyContainer:
                 aws_account_repository=self.get_aws_account_repository_adapter(),
                 chat_repository=self.get_chat_repository_adapter(),
                 agent_repository=self.get_agent_repository_adapter(),
-                aws_client=self.get_aws_client_adapter()
+                aws_client=self.get_aws_client_adapter(),
+                chat_service=self.get_chat_service()
             )
         return self._instances['process_chat_message_use_case']
 
