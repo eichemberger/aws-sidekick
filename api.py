@@ -98,14 +98,45 @@ def create_api_app():
     configure_container(agent, docs_tools, diagram_tools, github_tools)
     
     container = get_container()
-    task_service = container.task_application_service()
-    aws_service = container.aws_application_service()
-    chat_service = container.chat_application_service()
-    aws_account_service = container.aws_account_application_service()
     
-    api_adapter = FastAPIAdapter(task_service, aws_service, chat_service, aws_account_service)
+    # Initialize services with better error logging
+    try:
+        task_service = container.task_application_service()
+        logger.info("task_service_initialized | status=success")
+    except Exception as e:
+        logger.error(f"task_service_initialization_failed | error=<{str(e)}>")
+        raise
+    
+    try:
+        aws_service = container.aws_application_service()
+        logger.info("aws_service_initialized | status=success")
+    except Exception as e:
+        logger.error(f"aws_service_initialization_failed | error=<{str(e)}>")
+        raise
+    
+    try:
+        chat_service = container.chat_application_service()
+        logger.info("chat_service_initialized | status=success")
+    except Exception as e:
+        logger.error(f"chat_service_initialization_failed | error=<{str(e)}>")
+        raise
+    
+    try:
+        aws_account_service = container.aws_account_application_service()
+        logger.info("aws_account_service_initialized | status=success")
+    except Exception as e:
+        logger.error(f"aws_account_service_initialization_failed | error=<{str(e)}>")
+        raise
+    
+    try:
+        api_adapter = FastAPIAdapter(task_service, aws_service, chat_service, aws_account_service)
+        logger.info("fastapi_adapter_initialized | status=success")
+    except Exception as e:
+        logger.error(f"fastapi_adapter_initialization_failed | error=<{str(e)}>")
+        raise
     
     logger.info("API server initialized successfully - AWS credentials can be set via UI")
+    logger.info("multi_account_endpoints_registered | status=available")
     
     return api_adapter.app
 
@@ -131,6 +162,7 @@ def main():
         logger.info(f"docs_url=<http://{host}:{port}/docs> | API documentation available")
         
         if debug:
+            # In debug mode, use reload with string reference to allow hot reloading
             uvicorn.run(
                 "api:app",
                 host=host,
@@ -142,9 +174,9 @@ def main():
                 log_level="debug"
             )
         else:
-            app_instance = create_api_app()
+            # In production mode, use the same app instance for consistency
             uvicorn.run(
-                app_instance,
+                app,
                 host=host,
                 port=port,
                 access_log=True,
@@ -157,6 +189,7 @@ def main():
     
     return 0
 
+# Create the app instance once and reuse it
 app = create_api_app()
 
 

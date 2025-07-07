@@ -1,14 +1,14 @@
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, AsyncGenerator
 import uuid
 from datetime import datetime
-import re
-import ast
 import pathlib
+import json
+import asyncio
 
 from core.ports.inbound.task_service_port import TaskServicePort
 from core.ports.inbound.aws_service_port import AWSServicePort
@@ -37,9 +37,9 @@ class TaskResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(..., description="Chat message to send to the agent")
-    conversation_id: Optional[str] = Field(None, description="ID of the conversation to continue")
-    account_alias: Optional[str] = Field(None, description="AWS account alias to use for this chat")
+    message: str = Field(..., min_length=1, max_length=10000, description="Chat message to send to the agent")
+    conversation_id: Optional[str] = Field(None, pattern=r'^[a-f0-9-]{36}$', description="ID of the conversation to continue")
+    account_alias: Optional[str] = Field(None, min_length=1, max_length=100, description="AWS account alias to use for this chat")
 
 
 class ChatResponse(BaseModel):
@@ -138,16 +138,27 @@ class FastAPIAdapter:
         chat_service: ChatServicePort,
         aws_account_service: AWSAccountServicePort
     ):
+        from infrastructure.logging import get_logger
+        logger = get_logger(__name__)
+        
+        logger.info("initializing_fastapi_adapter | checking_service_availability")
+        
+        if not task_service:
+            raise ValueError("task_service cannot be None")
+        if not aws_service:
+            raise ValueError("aws_service cannot be None")
+        if not chat_service:
+            raise ValueError("chat_service cannot be None")
+        if not aws_account_service:
+            raise ValueError("aws_account_service cannot be None")
+        
         self._task_service = task_service
         self._aws_service = aws_service
         self._chat_service = chat_service
         self._aws_account_service = aws_account_service
         
-        # Get agent repository from container
-        container = get_container()
-        self._agent_repository = container.get_agent_repository_adapter()
+        logger.info("fastapi_adapter_services_validated | all_services=<available>")
         
-        # Get configuration
         config = get_config()
         
         self._app = FastAPI(
@@ -158,7 +169,6 @@ class FastAPIAdapter:
             redoc_url=config.api.redoc_url
         )
         
-        # Add CORS middleware
         self._app.add_middleware(
             CORSMiddleware,
             allow_origins=config.api.cors_origins,
@@ -167,22 +177,20 @@ class FastAPIAdapter:
             allow_headers=config.api.cors_allow_headers,
         )
         
-        # Setup static file serving for Vue.js client
         self._setup_static_files()
+        
+        logger.info("registering_api_routes | starting_route_setup")
         self._setup_routes()
+        logger.info("api_routes_registered | setup_complete")
 
     def _setup_static_files(self):
         """Setup static file serving for the Vue.js client"""
-        # Get the client build directory path
         current_dir = pathlib.Path(__file__).parent.parent.parent.parent
         client_dist_dir = current_dir / "client" / "dist"
         
-        # Check if the build directory exists
         if client_dist_dir.exists():
-            # Mount static files (JS, CSS, images, etc.)
             self._app.mount("/assets", StaticFiles(directory=str(client_dist_dir / "assets")), name="assets")
             
-            # Serve other static files if they exist
             for static_dir in ["css", "js", "img", "fonts"]:
                 static_path = client_dist_dir / static_dir
                 if static_path.exists():
@@ -233,140 +241,160 @@ class FastAPIAdapter:
         @self._app.post("/api/chat", response_model=ChatResponse, summary="Chat with the agent")
         async def chat(request: ChatRequest):
             """Send a message to the agent and get immediate response with persistence"""
-            conversation = None
-            conversation_id = None
-            
             try:
-                # Get the AWS account alias for this chat session
-                # Prefer the account_alias from the request, fallback to active session account
-                account_alias = request.account_alias or self._aws_service.get_active_account_alias()
+                # Basic input validation
+                if not request.message.strip():
+                    raise HTTPException(status_code=400, detail="Message cannot be empty")
                 
-                # Validate that we have an account to work with
-                if not account_alias:
-                    raise HTTPException(
-                        status_code=400, 
-                        detail="No AWS account selected. Please select an AWS account before sending messages."
-                    )
+                # Get the process chat message use case
+                process_chat_use_case = get_container().get_process_chat_message_use_case()
                 
-                # CRITICAL: Ensure correct account credentials are loaded
-                logger = get_logger(__name__)
-                logger.info(f"Ensuring credentials loaded for account: {account_alias}")
-                
-                # Check if we need to switch accounts (only switch if different from current active account)
-                current_active = self._aws_service.get_active_account_alias()
-                
-                try:
-                    if current_active != account_alias:
-                        # Only switch accounts if different - this triggers MCP reinitialization
-                        logger.info(f"Switching from account '{current_active}' to '{account_alias}'")
-                        await self._aws_service.set_active_account(account_alias)
-                        logger.info("Account switched successfully with MCP reinitialization")
-                    else:
-                        # Same account - just validate credentials are available without MCP reinitialization
-                        logger.info(f"Already using account '{account_alias}' - validating credentials")
-                        # Try to get account info to ensure credentials are still valid
-                        await self._aws_service.get_account_info(account_alias)
-                        logger.info("Credentials validated successfully")
-                    
-                except ValueError as e:
-                    logger.error(f"Failed to load credentials for account '{account_alias}': {e}")
-                    raise HTTPException(
-                        status_code=400, 
-                        detail=f"Failed to load credentials for account '{account_alias}'. Please re-enter credentials via the UI."
-                    )
-                except Exception as e:
-                    logger.error(f"Unexpected error with account '{account_alias}': {e}")
-                    raise HTTPException(
-                        status_code=500, 
-                        detail="Failed to access AWS account credentials"
-                    )
-                
-                # Get or create conversation
-                if request.conversation_id:
-                    conversation = await self._chat_service.get_conversation(request.conversation_id)
-                    if not conversation:
-                        raise HTTPException(status_code=404, detail="Conversation not found")
-                    conversation_id = conversation.id
-                    
-                    # Double-check credentials for existing conversation's account
-                    await self._ensure_credentials_loaded_for_account(conversation.account_id)
-                else:
-                    # For new conversations, create one with the account alias
-                    conversation = await self._chat_service.create_conversation_from_message(
-                        request.message, 
-                        account_alias=account_alias
-                    )
-                    conversation_id = conversation.id
-                    logger.info(f"Created new conversation {conversation_id} with account_id: {conversation.account_id}")
-                
-                # Add user message to conversation
-                user_message = await self._chat_service.add_message_to_conversation(
-                    conversation_id, 'user', request.message
+                # Execute the use case with all the business logic
+                result = await process_chat_use_case.execute(
+                    message=request.message,
+                    conversation_id=request.conversation_id,
+                    account_alias=request.account_alias
                 )
                 
-                # Execute using the dedicated chat method for better responsiveness
-                result = await self._agent_repository.execute_chat_prompt(request.message)
-                
-                # Clean the response
-                cleaned_response = self._clean_response(result)
-                
-                # Add assistant response to conversation
-                assistant_message = await self._chat_service.add_message_to_conversation(
-                    conversation_id, 'assistant', cleaned_response
-                )
-                
+                # Map the result to the HTTP response
                 return ChatResponse(
-                    response=cleaned_response,
-                    timestamp=assistant_message.timestamp,
-                    conversation_id=conversation_id,
-                    message_id=assistant_message.id
+                    response=result.response,
+                    timestamp=result.timestamp,
+                    conversation_id=result.conversation_id,
+                    message_id=result.message_id
                 )
                 
-            except HTTPException:
-                raise
             except Exception as e:
+                # Import domain exceptions here to avoid circular imports
+                from core.domain.exceptions import (
+                    AccountValidationError, 
+                    ConversationNotFoundError, 
+                    MessageProcessingError,
+                    DomainException
+                )
+                
                 logger = get_logger(__name__)
-                logger.error(f"Error in chat endpoint: {e}")
                 
-                # Create error message
-                error_msg = f"❌ I'm having trouble processing your request: {str(e)}. Please try again."
-                
-                # If we have a conversation, try to persist the error message
-                if conversation_id:
-                    try:
-                        await self._chat_service.add_message_to_conversation(
-                            conversation_id, 'assistant', error_msg
-                        )
-                        # Return with the actual conversation ID
-                        return ChatResponse(
-                            response=error_msg,
-                            timestamp=datetime.now(),
-                            conversation_id=conversation_id,
-                            message_id=str(uuid.uuid4())
-                        )
-                    except Exception as persist_error:
-                        logger.error(f"Failed to persist error message: {persist_error}")
-                
-                # If no conversation or persistence failed, create a temporary conversation
-                try:
-                    # Use the same account alias for error conversation
-                    temp_conversation = await self._chat_service.create_conversation_from_message(
-                        request.message, 
-                        account_alias=account_alias
-                    )
-                    await self._chat_service.add_message_to_conversation(temp_conversation.id, 'user', request.message)
-                    await self._chat_service.add_message_to_conversation(temp_conversation.id, 'assistant', error_msg)
-                    
-                    return ChatResponse(
-                        response=error_msg,
-                        timestamp=datetime.now(),
-                        conversation_id=temp_conversation.id,
-                        message_id=str(uuid.uuid4())
-                    )
-                except Exception as temp_error:
-                    logger.error(f"Failed to create temporary conversation: {temp_error}")
-                    # Last resort: return error without conversation persistence
+                # Handle specific domain exceptions with appropriate HTTP status codes
+                if isinstance(e, AccountValidationError):
+                    logger.warning(f"Account validation error: {e}")
+                    raise HTTPException(status_code=400, detail=str(e))
+                elif isinstance(e, ConversationNotFoundError):
+                    logger.warning(f"Conversation not found: {e}")
+                    raise HTTPException(status_code=404, detail=str(e))
+                elif isinstance(e, MessageProcessingError):
+                    logger.error(f"Message processing error: {e}")
+                    raise HTTPException(status_code=422, detail=str(e))
+                elif isinstance(e, DomainException):
+                    logger.error(f"Domain error: {e}")
+                    raise HTTPException(status_code=400, detail=str(e))
+                else:
+                    # Unexpected errors
+                    logger.error(f"Unexpected error in chat endpoint: {e}")
                     raise HTTPException(status_code=500, detail="Failed to process chat request")
+
+        @self._app.post("/api/chat/stream", summary="Chat with the agent (streaming response)")
+        async def chat_stream(request: ChatRequest):
+            """Send a message to the agent and get streaming response for better perceived performance"""
+            
+            async def stream_response() -> AsyncGenerator[str, None]:
+                """Stream the chat response in chunks"""
+                try:
+                    # Basic input validation
+                    if not request.message.strip():
+                        yield f"data: {json.dumps({'error': 'Message cannot be empty', 'status': 'error'})}\n\n"
+                        return
+                    
+                    # Send initial status
+                    yield f"data: {json.dumps({'status': 'processing', 'message': 'Processing your request...'})}\n\n"
+                    
+                    # Get the process chat message use case
+                    process_chat_use_case = get_container().get_process_chat_message_use_case()
+                    
+                    # Execute the use case with all the business logic
+                    result = await process_chat_use_case.execute(
+                        message=request.message,
+                        conversation_id=request.conversation_id,
+                        account_alias=request.account_alias
+                    )
+                    
+                    # Stream the response in chunks for better UX
+                    response_text = result.response
+                    chunk_size = 50  # Characters per chunk
+                    
+                    for i in range(0, len(response_text), chunk_size):
+                        chunk = response_text[i:i + chunk_size]
+                        chunk_data = {
+                            'type': 'content',
+                            'content': chunk,
+                            'timestamp': result.timestamp.isoformat(),
+                            'conversation_id': result.conversation_id,
+                            'message_id': result.message_id
+                        }
+                        yield f"data: {json.dumps(chunk_data)}\n\n"
+                        
+                        # Small delay to make streaming visible
+                        await asyncio.sleep(0.05)
+                    
+                    # Send completion status
+                    completion_data = {
+                        'type': 'complete',
+                        'status': 'success',
+                        'conversation_id': result.conversation_id,
+                        'message_id': result.message_id,
+                        'timestamp': result.timestamp.isoformat()
+                    }
+                    yield f"data: {json.dumps(completion_data)}\n\n"
+                    
+                except Exception as e:
+                    # Import domain exceptions here to avoid circular imports
+                    from core.domain.exceptions import (
+                        AccountValidationError, 
+                        ConversationNotFoundError, 
+                        MessageProcessingError,
+                        DomainException
+                    )
+                    
+                    logger = get_logger(__name__)
+                    
+                    # Handle specific domain exceptions with appropriate HTTP status codes
+                    error_message = str(e)
+                    if isinstance(e, AccountValidationError):
+                        logger.warning(f"Account validation error: {e}")
+                        error_type = "account_validation_error"
+                    elif isinstance(e, ConversationNotFoundError):
+                        logger.warning(f"Conversation not found: {e}")
+                        error_type = "conversation_not_found"
+                    elif isinstance(e, MessageProcessingError):
+                        logger.error(f"Message processing error: {e}")
+                        error_type = "message_processing_error"
+                    elif isinstance(e, DomainException):
+                        logger.error(f"Domain error: {e}")
+                        error_type = "domain_error"
+                    else:
+                        # Unexpected errors
+                        logger.error(f"Unexpected error in chat stream endpoint: {e}")
+                        error_type = "unexpected_error"
+                        error_message = "Failed to process chat request"
+                    
+                    error_data = {
+                        'type': 'error',
+                        'error_type': error_type,
+                        'error_message': error_message,
+                        'status': 'error',
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    yield f"data: {json.dumps(error_data)}\n\n"
+            
+            return StreamingResponse(
+                stream_response(),
+                media_type="text/plain",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "Content-Type": "text/event-stream"
+                }
+            )
 
         @self._app.post("/api/chat-async", response_model=TaskCreatedResponse, status_code=202, summary="Chat with the agent asynchronously")
         async def chat_async(request: ChatRequest):
@@ -411,7 +439,7 @@ class FastAPIAdapter:
                         task_id=task.id,
                         description=task.description,
                         status=task.status.value,
-                        result=self._clean_response(task.result) if task.result else None,
+                        result=task.result,
                         error_message=task.error_message,
                         created_at=task.created_at,
                         completed_at=task.completed_at,
@@ -436,7 +464,7 @@ class FastAPIAdapter:
                     task_id=task.id,
                     description=task.description,
                     status=task.status.value,
-                    result=self._clean_response(task.result) if task.result else None,
+                    result=task.result,
                     error_message=task.error_message,
                     created_at=task.created_at,
                     completed_at=task.completed_at,
@@ -511,12 +539,13 @@ class FastAPIAdapter:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Error starting cost optimization: {str(e)}")
 
-        # Multi-Account AWS Management Endpoints
+        logger = get_logger(__name__)
+        logger.info("registering_multi_account_endpoints | starting_registration")
+        
         @self._app.post("/api/aws/accounts", response_model=AWSAccountResponse, status_code=201, summary="Register AWS account")
         async def register_aws_account(request: AWSAccountRequest):
             """Register a new AWS account"""
             try:
-                # Convert Pydantic model to domain credentials
                 credentials = AWSCredentials(
                     access_key_id=request.credentials.access_key_id,
                     secret_access_key=request.credentials.secret_access_key,
@@ -728,6 +757,8 @@ class FastAPIAdapter:
                 logger.error(f"Error validating AWS account credentials: {e}")
                 raise HTTPException(status_code=500, detail="Failed to validate AWS account credentials")
 
+        logger.info("multi_account_endpoints_registered | endpoints=<register,list,get,update,delete,default,set_default,validate>")
+
         @self._app.get("/debug/credentials-status")
         async def debug_credentials_status():
             """Debug endpoint to check credential storage status"""
@@ -736,13 +767,10 @@ class FastAPIAdapter:
                 from infrastructure.credential_manager import get_credential_manager
                 credential_manager = get_credential_manager()
                 
-                # Get all accounts with credentials in memory
                 accounts_with_creds = await credential_manager.list_accounts_with_credentials()
                 
-                # Get active account info
                 active_alias = self._aws_service.get_active_account_alias()
                 
-                # Get current environment variables
                 env_vars = {
                     "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID", "NOT_SET"),
                     "AWS_SECRET_ACCESS_KEY": "***" if os.environ.get("AWS_SECRET_ACCESS_KEY") else "NOT_SET",
@@ -758,7 +786,6 @@ class FastAPIAdapter:
                     "current_environment_variables": env_vars
                 }
                 
-                # If there's an active account, check if it has credentials
                 if active_alias:
                     has_creds = await credential_manager.has_credentials(active_alias)
                     debug_info["active_account_has_credentials"] = has_creds
@@ -770,7 +797,48 @@ class FastAPIAdapter:
                 logger.error(f"Error in debug credentials status: {e}")
                 raise HTTPException(status_code=500, detail="Internal server error")
 
-        # Chat/Conversation Management Endpoints
+        @self._app.get("/debug/performance-stats")
+        async def debug_performance_stats():
+            """Debug endpoint to check chat processing performance statistics"""
+            try:
+                process_chat_use_case = get_container().get_process_chat_message_use_case()
+                
+                stats = process_chat_use_case.get_performance_stats()
+                
+                return {
+                    "status": "success",
+                    "timestamp": datetime.now().isoformat(),
+                    "performance_stats": stats,
+                    "optimization_notes": {
+                        "parallel_execution": "User message persistence and agent execution run in parallel",
+                        "account_caching": "AWS account validation results cached for 5 minutes",
+                        "conversation_caching": "Conversation metadata cached in memory",
+                        "response_timeouts": "Agent processing has 30-second timeout for resource management",
+                        "fire_and_forget": "Agent response persistence runs asynchronously after response sent"
+                    }
+                }
+                
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error in debug performance stats: {e}")
+                raise HTTPException(status_code=500, detail="Internal server error")
+
+        @self._app.post("/debug/clear-caches", status_code=204)
+        async def debug_clear_caches():
+            """Debug endpoint to clear performance caches"""
+            try:
+                process_chat_use_case = get_container().get_process_chat_message_use_case()
+                
+                process_chat_use_case.clear_caches()
+                
+                logger = get_logger(__name__)
+                logger.info("Performance caches cleared via debug endpoint")
+                
+            except Exception as e:
+                logger = get_logger(__name__)
+                logger.error(f"Error clearing performance caches: {e}")
+                raise HTTPException(status_code=500, detail="Internal server error")
+
         @self._app.get("/api/conversations", response_model=List[ConversationResponse], summary="List conversations")
         async def list_conversations(limit: int = 50, offset: int = 0):
             """Get list of conversations with pagination"""
@@ -834,120 +902,24 @@ class FastAPIAdapter:
         @self._app.get("/{path:path}")
         async def serve_spa(path: str):
             """Serve the Vue.js SPA for all non-API routes"""
-            # Get the client build directory path
             current_dir = pathlib.Path(__file__).parent.parent.parent.parent
             client_dist_dir = current_dir / "client" / "dist"
             index_file = client_dist_dir / "index.html"
             
-            # If the build directory doesn't exist, return a helpful message
             if not client_dist_dir.exists():
                 return {
                     "message": "Vue.js client not built",
                     "instructions": "Run 'cd client && npm run build' to build the client"
                 }
             
-            # If index.html doesn't exist, return error
             if not index_file.exists():
                 return {
                     "message": "Vue.js build incomplete",
                     "instructions": "Run 'cd client && npm run build' to build the client"
                 }
             
-            # Serve the index.html file for SPA routing
             return FileResponse(str(index_file))
 
-    # Removed _classify_user_input method - simplified task system
-
-    async def _ensure_credentials_loaded_for_account(self, account_id: str):
-        """Ensure credentials are loaded for the given account ID and reinitialize MCPs if needed."""
-        try:
-            # Skip if this is a default/fallback account
-            if account_id == "default":
-                return
-            
-            # Try to find the account by ID first
-            account = None
-            accounts = await self._aws_account_service.list_accounts()
-            for acc in accounts:
-                if acc.account_id == account_id:
-                    account = acc
-                    break
-            
-            # If not found by account_id, try by alias (for backward compatibility)
-            if not account:
-                try:
-                    account = await self._aws_account_service.get_account(account_id)
-                except:
-                    pass
-            
-            if not account:
-                logger = get_logger(__name__)
-                logger.warning(f"Account with ID '{account_id}' not found, using default credentials")
-                return
-            
-            # Load credentials from memory
-            credentials_loaded = await account.load_credentials()
-            if not credentials_loaded or not account.credentials:
-                logger = get_logger(__name__)
-                logger.warning(f"No credentials found for account '{account.alias}' (ID: {account_id})")
-                return
-            
-            # Check if this account is already the active one
-            current_active = self._aws_service.get_active_account_alias()
-            if current_active == account.alias:
-                # Already active, no need to switch
-                return
-            
-            # Switch to this account's credentials
-            await self._aws_service.set_active_account(account.alias)
-            
-            logger = get_logger(__name__)
-            logger.info(f"Switched to account '{account.alias}' (ID: {account_id}) for conversation")
-            
-        except Exception as e:
-            logger = get_logger(__name__)
-            logger.error(f"Error ensuring credentials for account {account_id}: {e}")
-            # Continue with current credentials rather than failing
-
-    def _clean_response(self, response):
-        """Clean and format response from agent"""
-        # Handle None or empty responses
-        if not response:
-            return "No response received from agent."
-        
-        # Convert to string if it's not already
-        if not isinstance(response, str):
-            try:
-                response = str(response)
-            except Exception:
-                return "Error: Could not convert response to string"
-        
-        # Remove <thinking>...</thinking> blocks
-        cleaned = re.sub(r'<thinking>.*?</thinking>', '', response, flags=re.DOTALL)
-        
-        # Check if response is in structured format like {'role': 'assistant', 'content': [{'text': '...'}]}
-        if "'role': 'assistant'" in cleaned and "'content'" in cleaned and "'text'" in cleaned:
-            try:
-                # Try to parse as Python literal
-                data = ast.literal_eval(cleaned)
-                if isinstance(data, dict) and 'content' in data and isinstance(data['content'], list):
-                    for item in data['content']:
-                        if isinstance(item, dict) and 'text' in item:
-                            # Return the text content directly (preserves markdown)
-                            return item['text']
-            except Exception:
-                # If parsing fails, try regex as fallback
-                match = re.search(r"'text': '(.+?)(?:'}]|})", cleaned, re.DOTALL)
-                if match:
-                    # Unescape the content to preserve markdown
-                    text = match.group(1)
-                    text = text.replace('\\n', '\n')  # Replace escaped newlines
-                    text = text.replace('\\t', '\t')  # Replace escaped tabs
-                    text = text.replace("\\'", "'")   # Replace escaped single quotes
-                    text = text.replace('\\"', '"')   # Replace escaped double quotes
-                    return text
-        
-        return cleaned.strip()
 
     @property
     def app(self) -> FastAPI:

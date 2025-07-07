@@ -24,6 +24,7 @@ from core.ports.outbound.aws_account_repository_port import AWSAccountRepository
 # Use Cases
 from core.use_cases.execute_task_use_case import ExecuteTaskUseCase
 from core.use_cases.aws_analysis_use_case import AWSAnalysisUseCase
+from core.use_cases.process_chat_message_use_case import ProcessChatMessageUseCase
 
 # Application Services
 from application.services.task_application_service import TaskApplicationService
@@ -73,6 +74,18 @@ class DependencyContainer:
         if 'aws_analysis_use_case' in self._instances:
             del self._instances['aws_analysis_use_case']
             logger.info("Cleared cached AWS analysis use case instance")
+        
+        # Clear process chat message use case which depends on agent
+        if 'process_chat_message_use_case' in self._instances:
+            # Clear performance caches before deleting the instance
+            try:
+                self._instances['process_chat_message_use_case'].clear_caches()
+                logger.info("Cleared performance caches from process chat message use case")
+            except Exception as e:
+                logger.warning(f"Failed to clear performance caches: {e}")
+            
+            del self._instances['process_chat_message_use_case']
+            logger.info("Cleared cached process chat message use case instance")
         
         # Clear chat service as it depends on AWS services that depend on agent
         if 'chat_service' in self._instances:
@@ -183,6 +196,17 @@ class DependencyContainer:
             )
         return self._instances['aws_analysis_use_case']
 
+    def get_process_chat_message_use_case(self) -> ProcessChatMessageUseCase:
+        """Get process chat message use case with optimized dependencies"""
+        if 'process_chat_message_use_case' not in self._instances:
+            self._instances['process_chat_message_use_case'] = ProcessChatMessageUseCase(
+                aws_account_repository=self.get_aws_account_repository_adapter(),
+                chat_repository=self.get_chat_repository_adapter(),
+                agent_repository=self.get_agent_repository_adapter(),
+                aws_client=self.get_aws_client_adapter()
+            )
+        return self._instances['process_chat_message_use_case']
+
     def get_task_service(self) -> TaskServicePort:
         """Get task application service"""
         if 'task_service' not in self._instances:
@@ -216,10 +240,17 @@ class DependencyContainer:
     def get_aws_account_service(self) -> AWSAccountServicePort:
         """Get AWS account application service"""
         if 'aws_account_service' not in self._instances:
+            from infrastructure.logging import get_logger
+            logger = get_logger(__name__)
+            
+            config = get_config()
+            logger.info(f"initializing_aws_account_service | environment=<{config.environment}> | debug=<{config.debug}>")
+            
             self._instances['aws_account_service'] = AWSAccountApplicationService(
                 account_repository=self.get_aws_account_repository_adapter(),
                 aws_client=self.get_aws_client_adapter()
             )
+            logger.info("aws_account_service_created | multi_account_features=<enabled>")
         return self._instances['aws_account_service']
 
 
