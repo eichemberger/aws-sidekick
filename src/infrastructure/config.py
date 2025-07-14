@@ -24,13 +24,14 @@ logger = get_logger(__name__)
 
 @dataclass(frozen=True)
 class ModelConfig:
-    """Configuration for the AI model"""
-    provider: str = "anthropic"  # "anthropic" or "openai"
-    model_id: str = "claude-sonnet-4-20250514"
-    max_tokens: int = 1000
-    temperature: float = 0.7
-    anthropic_api_key: str = ""
-    openai_api_key: str = ""
+    """Model configuration"""
+    provider: str
+    model_id: str
+    max_tokens: int
+    temperature: float
+    anthropic_api_key: str
+    openai_api_key: str
+    agent_timeout: float = 120.0  # Default 2 minutes timeout for agent operations
     
     @property
     def api_key(self) -> str:
@@ -40,26 +41,22 @@ class ModelConfig:
         elif self.provider == "openai":
             return self.openai_api_key
         else:
-            return ""
-    
+            raise ValueError(f"Unsupported provider: {self.provider}")
+
     def validate(self) -> None:
         """Validate model configuration"""
-        if self.provider not in ["anthropic", "openai"]:
-            raise ValueError(
-                f"MODEL_PROVIDER must be either 'anthropic' or 'openai', got: {self.provider}"
-            )
-        
-        if self.provider == "anthropic" and not self.anthropic_api_key:
-            raise ValueError(
-                "ANTHROPIC_API_KEY is required when using Anthropic models. Please set it in your .env file:\n"
-                "ANTHROPIC_API_KEY=your_api_key_here"
-            )
-        
-        if self.provider == "openai" and not self.openai_api_key:
-            raise ValueError(
-                "OPENAI_API_KEY is required when using OpenAI models. Please set it in your .env file:\n"
-                "OPENAI_API_KEY=your_api_key_here"
-            )
+        if not self.provider:
+            raise ValueError("Model provider is required")
+        if not self.model_id:
+            raise ValueError("Model ID is required")
+        if not self.api_key:
+            raise ValueError(f"API key is required for provider: {self.provider}")
+        if self.max_tokens <= 0:
+            raise ValueError("Max tokens must be positive")
+        if not (0.0 <= self.temperature <= 2.0):
+            raise ValueError("Temperature must be between 0.0 and 2.0")
+        if self.agent_timeout <= 0:
+            raise ValueError("Agent timeout must be positive")
     
     def get_default_model_id(self) -> str:
         """Get default model ID based on provider"""
@@ -389,7 +386,8 @@ class Config:
             max_tokens=int(os.getenv("MAX_TOKENS", "1000")),
             temperature=float(os.getenv("TEMPERATURE", "0.7")),
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
-            openai_api_key=os.getenv("OPENAI_API_KEY", "")
+            openai_api_key=os.getenv("OPENAI_API_KEY", ""),
+            agent_timeout=float(os.getenv("AGENT_TIMEOUT", "120.0"))
         )
         
         # AWS configuration

@@ -1,9 +1,11 @@
 import asyncio
-from typing import Optional
+import time
+from collections import OrderedDict
+from typing import Optional, Dict, Any
 from datetime import datetime
 import uuid
 
-from core.domain.entities.chat import ChatProcessingResult
+from core.domain.entities.chat import ChatProcessingResult, ChatMessage
 from core.domain.services.response_processor import AgentResponseProcessor
 from core.domain.services.account_context_cache import AccountContextCache
 from core.domain.exceptions import (
@@ -28,7 +30,9 @@ class ProcessChatMessageUseCase:
         chat_repository: ChatRepositoryPort,
         agent_repository: AgentRepositoryPort,
         aws_client: AWSClientPort,
-        chat_service: ChatServicePort
+        chat_service: ChatServicePort,
+        max_cache_size: int = 100,
+        agent_timeout: float = 120.0
     ):
         self._aws_account_repository = aws_account_repository
         self._chat_repository = chat_repository
@@ -40,11 +44,15 @@ class ProcessChatMessageUseCase:
         
         # Initialize performance optimizations
         self._account_cache = AccountContextCache(ttl_seconds=300)  # 5 minutes cache
-        self._conversation_cache = {}  # Simple in-memory cache for conversations
+        self._conversation_cache: OrderedDict[str, Any] = OrderedDict()
+        self._max_cache_size = max_cache_size
+        self._agent_timeout = agent_timeout
         
         # Performance metrics
         self._request_count = 0
         self._total_processing_time = 0.0
+        self._timeout_count = 0
+        self._avg_agent_processing_time = 0.0
     
     async def execute(
         self,
@@ -54,28 +62,22 @@ class ProcessChatMessageUseCase:
     ) -> ChatProcessingResult:
         """Execute chat message processing with advanced performance optimizations"""
         
-        start_time = asyncio.get_event_loop().time()
+        start_time = time.monotonic()
         self._request_count += 1
         
         try:
-            # Phase 1: Fast path validation (parallel where possible)
+            # Phase 1: Fast path validation (in parallel)
             validation_tasks = []
-            
-            # 1a. Account context validation (with caching)
             if account_alias:
-                validation_tasks.append(
-                    self._validate_account_context(account_alias)
-                )
-            
-            # 1b. Conversation validation (with caching)
+                validation_tasks.append(self._validate_account_context(account_alias))
             if conversation_id:
-                validation_tasks.append(
-                    self._validate_conversation_context(conversation_id)
-                )
+                validation_tasks.append(self._validate_conversation_context(conversation_id))
             
-            # Execute validation tasks in parallel
             if validation_tasks:
-                await asyncio.gather(*validation_tasks, return_exceptions=True)
+                results = await asyncio.gather(*validation_tasks, return_exceptions=True)
+                for res in results:
+                    if isinstance(res, Exception):
+                        raise res
             
             # Phase 2: Prepare conversation context
             conversation = await self._ensure_conversation_context(
@@ -83,44 +85,37 @@ class ProcessChatMessageUseCase:
             )
             
             # Phase 3: High-performance parallel execution
-            # Create tasks for parallel execution
-            tasks = []
-            
-            # 3a. Persist user message (fire-and-forget with result capture)
-            user_message_task = asyncio.create_task(
-                self._persist_user_message(conversation.id, message)
-            )
-            tasks.append(user_message_task)
-            
-            # 3b. Execute agent processing (main processing path)
             agent_task = asyncio.create_task(
                 self._execute_agent_processing(message, conversation.id)
             )
-            tasks.append(agent_task)
-            
-            # 3c. Optional: Preload conversation history for context (if needed)
+
+            # Non-critical tasks that can run in the background
+            background_tasks = [
+                asyncio.create_task(
+                    self._persist_user_message(conversation.id, message)
+                ),
+            ]
             if conversation_id:
-                history_task = asyncio.create_task(
-                    self._preload_conversation_history(conversation_id)
+                background_tasks.append(
+                    asyncio.create_task(
+                        self._preload_conversation_history(conversation_id)
+                    )
                 )
-                tasks.append(history_task)
-            
-            # Execute all tasks in parallel with optimized gathering
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # Phase 4: Process results with error handling
-            user_message_result = results[0]
-            agent_result = results[1]
-            
-            # Handle any exceptions from parallel execution
-            if isinstance(user_message_result, Exception):
-                self._logger.warning(f"User message persistence failed: {user_message_result}")
-                # Continue processing - this is not critical for response
-            
-            if isinstance(agent_result, Exception):
-                self._logger.error(f"Agent processing failed: {agent_result}")
-                raise MessageProcessingError(f"Agent processing failed: {agent_result}")
-            
+
+            # Phase 4: Process critical path result
+            try:
+                agent_result = await agent_task
+            except Exception as e:
+                self._logger.error(f"Agent processing failed: {e}")
+                # Cancel background tasks if critical task fails
+                for task in background_tasks:
+                    task.cancel()
+                raise MessageProcessingError(f"Agent processing failed: {e}")
+
+            # Log errors from non-critical background tasks without failing the request
+            for task in background_tasks:
+                task.add_done_callback(self._log_background_task_error)
+
             # Phase 5: Fast response processing
             processed_response = await self._process_agent_response(
                 agent_result, conversation.id
@@ -136,8 +131,7 @@ class ProcessChatMessageUseCase:
             )
             
             # Update performance metrics
-            end_time = asyncio.get_event_loop().time()
-            processing_time = end_time - start_time
+            processing_time = time.monotonic() - start_time
             self._total_processing_time += processing_time
             
             self._logger.info(
@@ -150,14 +144,22 @@ class ProcessChatMessageUseCase:
             return processed_response
             
         except Exception as e:
-            end_time = asyncio.get_event_loop().time()
-            processing_time = end_time - start_time
+            processing_time = time.monotonic() - start_time
             self._logger.error(
                 f"chat_message_failed | "
                 f"processing_time={processing_time:.3f}s | "
                 f"error={str(e)}"
             )
             raise
+
+    def _log_background_task_error(self, task: asyncio.Task) -> None:
+        """Callback to log exceptions from background tasks."""
+        if task.cancelled():
+            return
+        if task.exception():
+            self._logger.warning(
+                f"A non-critical background task failed: {task.exception()}"
+            )
     
     async def _validate_account_context(self, account_alias: str) -> None:
         """Fast account context validation with caching"""
@@ -175,6 +177,7 @@ class ProcessChatMessageUseCase:
         """Fast conversation validation with caching"""
         # Check cache first
         if conversation_id in self._conversation_cache:
+            self._conversation_cache.move_to_end(conversation_id)
             return
         
         try:
@@ -184,6 +187,8 @@ class ProcessChatMessageUseCase:
             
             # Cache the conversation
             self._conversation_cache[conversation_id] = conversation
+            if len(self._conversation_cache) > self._max_cache_size:
+                self._conversation_cache.popitem(last=False)
             
         except Exception as e:
             if isinstance(e, ConversationNotFoundError):
@@ -202,6 +207,7 @@ class ProcessChatMessageUseCase:
         if conversation_id:
             # Use cached conversation if available
             if conversation_id in self._conversation_cache:
+                self._conversation_cache.move_to_end(conversation_id)
                 return self._conversation_cache[conversation_id]
             
             conversation = await self._chat_repository.get_conversation(conversation_id)
@@ -210,6 +216,8 @@ class ProcessChatMessageUseCase:
             
             # Cache for future use
             self._conversation_cache[conversation_id] = conversation
+            if len(self._conversation_cache) > self._max_cache_size:
+                self._conversation_cache.popitem(last=False)
             return conversation
         
         # Create new conversation using the chat service which will generate proper title
@@ -219,12 +227,12 @@ class ProcessChatMessageUseCase:
         
         # Cache the new conversation
         self._conversation_cache[conversation.id] = conversation
+        if len(self._conversation_cache) > self._max_cache_size:
+            self._conversation_cache.popitem(last=False)
         return conversation
     
     async def _persist_user_message(self, conversation_id: str, message: str) -> str:
         """Persist user message with optimized database call"""
-        from core.domain.entities.chat import ChatMessage
-        
         user_message = ChatMessage(
             id=str(uuid.uuid4()),
             conversation_id=conversation_id,
@@ -238,25 +246,51 @@ class ProcessChatMessageUseCase:
     
     async def _execute_agent_processing(self, message: str, conversation_id: str) -> str:
         """Execute agent processing with performance monitoring"""
-        start_time = asyncio.get_event_loop().time()
+        start_time = time.monotonic()
         
         try:
             # Execute agent with timeout for better resource management
+            # Increased timeout to accommodate complex operations with multiple tool calls
             agent_response = await asyncio.wait_for(
                 self._agent_repository.execute_chat_prompt(message),
-                timeout=30.0  # 30 second timeout
+                timeout=self._agent_timeout  # Use configurable timeout
             )
             
-            processing_time = asyncio.get_event_loop().time() - start_time
+            processing_time = time.monotonic() - start_time
+            
+            # Update agent processing time statistics
+            if self._request_count > 0:
+                self._avg_agent_processing_time = (
+                    (self._avg_agent_processing_time * (self._request_count - 1) + processing_time) / self._request_count
+                )
+            else:
+                self._avg_agent_processing_time = processing_time
+            
             self._logger.debug(f"Agent processing completed in {processing_time:.3f}s")
             
             return agent_response
             
         except asyncio.TimeoutError:
-            self._logger.error("Agent processing timed out after 30 seconds")
-            raise MessageProcessingError("Agent processing timed out")
+            processing_time = time.monotonic() - start_time
+            self._logger.error(f"Agent processing timed out after {processing_time:.3f}s (configured timeout: {self._agent_timeout}s)")
+            self._timeout_count += 1
+            
+            # Provide more helpful timeout message based on duration
+            if processing_time > 60:
+                timeout_message = (
+                    "The request is taking longer than expected due to complex operations. "
+                    "This often happens when searching documentation or performing detailed analysis. "
+                    "Please try a simpler question or break your request into smaller parts."
+                )
+            else:
+                timeout_message = (
+                    "The request timed out. This might be due to high system load or complex operations. "
+                    "Please try again in a moment."
+                )
+            
+            raise MessageProcessingError(timeout_message)
         except Exception as e:
-            processing_time = asyncio.get_event_loop().time() - start_time
+            processing_time = time.monotonic() - start_time
             self._logger.error(f"Agent processing failed after {processing_time:.3f}s: {e}")
             raise MessageProcessingError(f"Agent execution failed: {e}")
     
@@ -298,8 +332,6 @@ class ProcessChatMessageUseCase:
     ) -> None:
         """Persist agent response asynchronously (fire-and-forget)"""
         try:
-            from core.domain.entities.chat import ChatMessage
-            
             agent_message = ChatMessage(
                 id=message_id,
                 conversation_id=conversation_id,
@@ -321,7 +353,9 @@ class ProcessChatMessageUseCase:
             "total_processing_time": self._total_processing_time,
             "avg_processing_time": self._total_processing_time / max(self._request_count, 1),
             "account_cache_stats": self._account_cache.get_cache_stats(),
-            "conversation_cache_size": len(self._conversation_cache)
+            "conversation_cache_size": len(self._conversation_cache),
+            "timeout_count": self._timeout_count,
+            "avg_agent_processing_time": self._avg_agent_processing_time
         }
     
     def clear_caches(self) -> None:

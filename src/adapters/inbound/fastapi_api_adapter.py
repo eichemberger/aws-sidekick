@@ -178,6 +178,32 @@ class FastAPIAdapter:
         
         setup_spa_fallback(self._app)
 
+    def _to_task_response(self, task) -> TaskResponse:
+        """Maps a Task domain entity to a TaskResponse Pydantic model."""
+        return TaskResponse(
+            task_id=task.id,
+            description=task.description,
+            status=task.status.value,
+            result=task.result,
+            error_message=task.error_message,
+            created_at=task.created_at,
+            completed_at=task.completed_at,
+            duration=task.duration()
+        )
+
+    def _to_aws_account_response(self, account) -> AWSAccountResponse:
+        """Maps an AWSAccount domain entity to an AWSAccountResponse Pydantic model."""
+        return AWSAccountResponse(
+            alias=account.alias,
+            description=account.description,
+            region=account.region,
+            account_id=account.account_id,
+            uses_profile=account.uses_profile,
+            is_default=account.is_default,
+            created_at=account.created_at,
+            updated_at=account.updated_at
+        )
+
     def _setup_routes(self):
         """Setup API routes"""
         
@@ -351,40 +377,16 @@ class FastAPIAdapter:
         async def list_tasks(limit: int = 10, offset: int = 0):
             """List recent tasks"""
             tasks = await self._task_service.get_tasks(limit=limit, offset=offset)
-            
-            return [
-                TaskResponse(
-                    task_id=task.id,
-                    description=task.description,
-                    status=task.status.value,
-                    result=task.result,
-                    error_message=task.error_message,
-                    created_at=task.created_at,
-                    completed_at=task.completed_at,
-                    duration=task.duration()
-                )
-                for task in tasks
-            ]
+            return [self._to_task_response(task) for task in tasks]
 
         @self._app.get("/api/tasks/{task_id}", response_model=TaskResponse, summary="Get task by ID")
         @with_error_handling("get task")
         async def get_task(task_id: str):
             """Get a specific task by ID"""
             task = await self._task_service.get_task(task_id)
-            
             if not task:
                 raise HTTPException(status_code=404, detail="Task not found")
-            
-            return TaskResponse(
-                task_id=task.id,
-                description=task.description,
-                status=task.status.value,
-                result=task.result,
-                error_message=task.error_message,
-                created_at=task.created_at,
-                completed_at=task.completed_at,
-                duration=task.duration()
-            )
+            return self._to_task_response(task)
 
         @self._app.get("/api/aws/account-info", response_model=AWSAccountInfo, summary="Get AWS account information")
         @with_error_handling("get AWS account info")
@@ -459,35 +461,14 @@ class FastAPIAdapter:
                 set_as_default=request.set_as_default
             )
             
-            return AWSAccountResponse(
-                alias=account.alias,
-                description=account.description,
-                region=account.region,
-                account_id=account.account_id,
-                uses_profile=account.uses_profile,
-                is_default=account.is_default,
-                created_at=account.created_at,
-                updated_at=account.updated_at
-            )
+            return self._to_aws_account_response(account)
 
         @self._app.get("/api/aws/accounts", response_model=List[AWSAccountResponse], summary="List AWS accounts")
         @with_error_handling("list AWS accounts")
         async def list_aws_accounts():
             """List all registered AWS accounts"""
             accounts = await self._aws_account_service.list_accounts()
-            return [
-                AWSAccountResponse(
-                    alias=account.alias,
-                    description=account.description,
-                    region=account.region,
-                    account_id=account.account_id,
-                    uses_profile=account.uses_profile,
-                    is_default=account.is_default,
-                    created_at=account.created_at,
-                    updated_at=account.updated_at
-                )
-                for account in accounts
-            ]
+            return [self._to_aws_account_response(account) for account in accounts]
 
         @self._app.get("/api/aws/accounts/{alias}", response_model=AWSAccountResponse, summary="Get AWS account")
         @with_error_handling("get AWS account")
@@ -497,16 +478,7 @@ class FastAPIAdapter:
             if not account:
                 raise HTTPException(status_code=404, detail=f"AWS account '{alias}' not found")
             
-            return AWSAccountResponse(
-                alias=account.alias,
-                description=account.description,
-                region=account.region,
-                account_id=account.account_id,
-                uses_profile=account.uses_profile,
-                is_default=account.is_default,
-                created_at=account.created_at,
-                updated_at=account.updated_at
-            )
+            return self._to_aws_account_response(account)
 
         @self._app.put("/api/aws/accounts/{alias}/credentials", response_model=AWSAccountResponse, summary="Update AWS account credentials")
         @with_error_handling("update AWS account credentials")
@@ -523,16 +495,7 @@ class FastAPIAdapter:
             
             account = await self._aws_account_service.update_account_credentials(alias, credentials)
             
-            return AWSAccountResponse(
-                alias=account.alias,
-                description=account.description,
-                region=account.region,
-                account_id=account.account_id,
-                uses_profile=account.uses_profile,
-                is_default=account.is_default,
-                created_at=account.created_at,
-                updated_at=account.updated_at
-            )
+            return self._to_aws_account_response(account)
 
         @self._app.delete("/api/aws/accounts/{alias}", status_code=204, summary="Delete AWS account")
         @with_error_handling("delete AWS account")
@@ -550,16 +513,7 @@ class FastAPIAdapter:
             if not account:
                 raise HTTPException(status_code=404, detail="No default AWS account set")
             
-            return AWSAccountResponse(
-                alias=account.alias,
-                description=account.description,
-                region=account.region,
-                account_id=account.account_id,
-                uses_profile=account.uses_profile,
-                is_default=account.is_default,
-                created_at=account.created_at,
-                updated_at=account.updated_at
-            )
+            return self._to_aws_account_response(account)
 
         @self._app.post("/api/aws/accounts/{alias}/default", status_code=204, summary="Set default AWS account")
         @with_error_handling("set default AWS account")
@@ -596,6 +550,17 @@ class FastAPIAdapter:
             return ValidationResponse(valid=is_valid)
 
         logger.info("multi_account_endpoints_registered | endpoints=<register,list,get,update,delete,default,set_default,validate>")
+
+        @self._app.get("/api/performance/chat", summary="Get chat performance statistics")
+        @with_error_handling("get chat performance stats")
+        async def get_chat_performance_stats():
+            """Get performance statistics for chat operations"""
+            process_chat_use_case = get_container().get_process_chat_message_use_case()
+            stats = process_chat_use_case.get_performance_stats()
+            return {
+                "chat_performance": stats,
+                "timestamp": datetime.now().isoformat()
+            }
 
         @self._app.get("/api/conversations", response_model=List[ConversationResponse], summary="List conversations")
         @with_error_handling("list conversations")

@@ -200,12 +200,15 @@ class DependencyContainer:
     def get_process_chat_message_use_case(self) -> ProcessChatMessageUseCase:
         """Get process chat message use case with optimized dependencies"""
         if 'process_chat_message_use_case' not in self._instances:
+            config = get_config()
+            
             self._instances['process_chat_message_use_case'] = ProcessChatMessageUseCase(
                 aws_account_repository=self.get_aws_account_repository_adapter(),
                 chat_repository=self.get_chat_repository_adapter(),
                 agent_repository=self.get_agent_repository_adapter(),
                 aws_client=self.get_aws_client_adapter(),
-                chat_service=self.get_chat_service()
+                chat_service=self.get_chat_service(),
+                agent_timeout=config.model.agent_timeout
             )
         return self._instances['process_chat_message_use_case']
 
